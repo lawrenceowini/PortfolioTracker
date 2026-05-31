@@ -1032,6 +1032,9 @@ def add_dashboard_charts(
     if TRANSACTIONS_SHEET in workbook.sheetnames:
         style_transactions_sheet(workbook[TRANSACTIONS_SHEET])
 
+    if "NSE_Prices" in workbook.sheetnames:
+        style_nse_prices_sheet(workbook["NSE_Prices"])
+
     if STATE_SHEET in workbook.sheetnames:
         workbook[STATE_SHEET].sheet_state = "hidden"
 
