@@ -1,10 +1,14 @@
 import os
 import shutil
 import ast
+import html
 import math
 import operator
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime
+from html.parser import HTMLParser
 import pandas as pd
 import matplotlib.pyplot as plt
 from openpyxl import load_workbook
@@ -19,6 +23,22 @@ SINGLE_ASSET_WEIGHT_LIMIT = 10
 SECTOR_RISK_EXCLUSIONS = {"Cash", "Fixed Income"}
 TRANSACTIONS_SHEET = "Transactions"
 STATE_SHEET = "Portfolio_State"
+NSE_PRICE_SOURCE_URL = "https://www.mansamarkets.com/kenya"
+NSE_PRICE_SOURCE_NAME = "NSE live market data"
+NSE_PRICE_REFRESHED_AT = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+NSE_ASSET_TICKERS = {
+    "Co-op Bank": "COOP",
+    "Equity": "EQTY",
+    "KCB": "KCB",
+    "NCBA": "NCBA",
+    "Safaricom": "SCOM",
+    "Jubilee": "JUB",
+    "CIC": "CIC",
+    "Britam": "BRIT",
+    "KenGen": "KEGN",
+    "Kenya Power": "KPLC",
+    "Total Energies Marketing": "TOTL",
+}
 SECTOR_LABELS = {
     "Banking": "Banking",
     "Telecommunication": "Telecom",
@@ -62,6 +82,7 @@ STATE_COLUMNS = [
     "Current Price",
     "Market Value",
 ]
+NSE_PRICE_TABLE_HEADERS = ["Asset", "Ticker", "NSE Price", "Price Source", "Last Updated"]
 
 ALLOWED_OPERATORS = {
     ast.Add: operator.add,
@@ -150,6 +171,127 @@ def formula_backed_column_values(file_path, sheet_name, header_idx, column_index
         values.append(value)
 
     return pd.Series(pd.to_numeric(values, errors="coerce"))
+
+
+class TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+
+    def handle_data(self, data):
+        if data:
+            self.parts.append(data)
+
+    def get_text(self):
+        return html.unescape(" ".join(self.parts))
+
+
+def fetch_url_text(url):
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def extract_current_price_from_html(page_html):
+    extractor = TextExtractor()
+    extractor.feed(page_html)
+    page_text = re.sub(r"\s+", " ", extractor.get_text()).strip()
+
+    match = re.search(r"Current Price\s*KSh\s*([\d,]+(?:\.\d+)?)", page_text, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+
+    match = re.search(r"KSh\s*([\d,]+(?:\.\d+)?)\s*Change", page_text, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+
+    return None
+
+
+def fetch_nse_price_for_ticker(ticker):
+    url = f"https://www.mansamarkets.com/kenya/{ticker.lower()}"
+    try:
+        page_html = fetch_url_text(url)
+        price = extract_current_price_from_html(page_html)
+        if price is None:
+            raise ValueError(f"Could not parse NSE price from {url}")
+        return {
+            "ticker": ticker,
+            "price": price,
+            "source": NSE_PRICE_SOURCE_NAME,
+            "updated": NSE_PRICE_REFRESHED_AT,
+            "url": url,
+        }
+    except Exception:
+        return {
+            "ticker": ticker,
+            "price": None,
+            "source": f"{NSE_PRICE_SOURCE_NAME} unavailable",
+            "updated": NSE_PRICE_REFRESHED_AT,
+            "url": url,
+        }
+
+
+def fetch_nse_prices_for_assets(asset_names):
+    results = {}
+    for asset_name in asset_names:
+        ticker = NSE_ASSET_TICKERS.get(asset_name)
+        if not ticker:
+            continue
+        results[asset_name] = fetch_nse_price_for_ticker(ticker)
+    return results
+
+
+def apply_nse_prices(holdings, nse_prices):
+    holdings = holdings.copy()
+    holdings["Ticker"] = holdings["Asset"].map(NSE_ASSET_TICKERS).fillna("")
+    holdings["NSE Price"] = None
+    holdings["Price Source"] = "Manual / non-NSE"
+    holdings["Price Last Updated"] = ""
+
+    for row_index, row in holdings.iterrows():
+        asset_name = row["Asset"]
+        price_data = nse_prices.get(asset_name)
+
+        if not price_data:
+            continue
+
+        holdings.at[row_index, "Price Source"] = price_data["source"]
+        holdings.at[row_index, "Price Last Updated"] = price_data["updated"]
+
+        if price_data["price"] is not None:
+            holdings.at[row_index, "Current Price"] = price_data["price"]
+            holdings.at[row_index, "NSE Price"] = price_data["price"]
+
+    return holdings
+
+
+def build_nse_price_table(holdings):
+    table = holdings[
+        [
+            "Asset",
+            "Ticker",
+            "Current Price",
+            "Price Source",
+            "Price Last Updated",
+        ]
+    ].copy()
+    table.columns = NSE_PRICE_TABLE_HEADERS
+    return table
+
+
+def inject_nse_live_prices(holdings):
+    asset_names = holdings["Asset"].dropna().unique()
+    nse_prices = fetch_nse_prices_for_assets(asset_names)
+    holdings = apply_nse_prices(holdings, nse_prices)
+    return holdings
 
 
 def empty_transactions():
@@ -762,6 +904,54 @@ def style_transactions_sheet(worksheet):
             worksheet.cell(row=row, column=col).number_format = '#,##0.00'
 
 
+def style_nse_prices_sheet(worksheet):
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_COLOR),
+        right=Side(style="thin", color=BORDER_COLOR),
+        top=Side(style="thin", color=BORDER_COLOR),
+        bottom=Side(style="thin", color=BORDER_COLOR),
+    )
+    header_fill = PatternFill("solid", fgColor=DARK_OLIVE)
+    odd_fill = PatternFill("solid", fgColor=WARM_BEIGE)
+    even_fill = PatternFill("solid", fgColor=WARM_WHITE)
+
+    worksheet.sheet_view.showGridLines = False
+    worksheet.freeze_panes = "A2"
+
+    widths = {
+        "A": 28,
+        "B": 18,
+        "C": 18,
+        "D": 24,
+        "E": 22,
+    }
+    for column, width in widths.items():
+        worksheet.column_dimensions[column].width = width
+
+    for row in range(1, worksheet.max_row + 1):
+        is_header = row == 1
+        fill = header_fill if is_header else odd_fill if row % 2 == 0 else even_fill
+        font = (
+            Font(name="Georgia", color=CREAM, bold=True)
+            if is_header
+            else Font(name="Georgia", color=TEXT_DARK)
+        )
+
+        for col in range(1, worksheet.max_column + 1):
+            cell = worksheet.cell(row=row, column=col)
+            cell.fill = fill
+            cell.font = font
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal="left" if col == 1 else "center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+    for row in range(2, worksheet.max_row + 1):
+        worksheet.cell(row=row, column=3).number_format = '#,##0.00'
+
+
 def add_dashboard_charts(
     file_path,
     asset_count,
@@ -925,12 +1115,15 @@ holdings = holdings[~holdings["Asset"].isin(invalid_labels)]
 holdings = holdings.copy()
 
 # -----------------------------
-# CRITICAL FIX 2: COMPUTE MARKET VALUE SAFELY
+# CRITICAL FIX 2: APPLY LIVE NSE PRICES BEFORE VALUE CALCULATIONS
 # -----------------------------
+print("\nFetching live NSE prices for mapped holdings...")
+holdings = inject_nse_live_prices(holdings)
+
 holdings["Market Value"] = holdings["Shares"] * holdings["Current Price"]
 
 print("\n--- CLEAN HOLDINGS SAMPLE ---")
-print(holdings[["Asset", "Shares", "Current Price", "Market Value"]].head(15))
+print(holdings[["Asset", "Shares", "Current Price", "Market Value", "Price Source"]].head(15))
 
 # -----------------------------
 # TOTAL VALUE
@@ -1138,6 +1331,13 @@ with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
         writer,
         sheet_name="Dashboard1",
         startrow=rebalance_plan_startrow,
+        index=False,
+    )
+    nse_price_table = build_nse_price_table(holdings)
+    nse_price_table.to_excel(
+        writer,
+        sheet_name="NSE_Prices",
+        startrow=0,
         index=False,
     )
     transactions.to_excel(
