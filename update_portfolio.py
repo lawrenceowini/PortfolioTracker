@@ -12,7 +12,7 @@ from html.parser import HTMLParser
 import pandas as pd
 import matplotlib.pyplot as plt
 from openpyxl import load_workbook
-from openpyxl.chart import BarChart, PieChart, Reference
+from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 CELL_REF_RE = re.compile(r"(?<![A-Za-z0-9_])(\$?[A-Z]{1,3}\$?\d+)(?![A-Za-z0-9_])")
@@ -23,6 +23,9 @@ SINGLE_ASSET_WEIGHT_LIMIT = 10
 SECTOR_RISK_EXCLUSIONS = {"Cash", "Fixed Income"}
 TRANSACTIONS_SHEET = "Transactions"
 STATE_SHEET = "Portfolio_State"
+DIVIDEND_INPUT_SHEET = "Dividend Tracking"
+DIVIDEND_OUTPUT_SHEET = "Dividends"
+PERFORMANCE_HISTORY_SHEET = "Performance History"
 NSE_PRICE_SOURCE_URL = "https://www.mansamarkets.com/kenya"
 NSE_PRICE_SOURCE_NAME = "NSE live market data"
 NSE_PRICE_REFRESHED_AT = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -952,6 +955,391 @@ def style_nse_prices_sheet(worksheet):
         worksheet.cell(row=row, column=3).number_format = '#,##0.00'
 
 
+def normalize_asset_name(name):
+    if pd.isna(name):
+        return ""
+    normalized = str(name).lower()
+    normalized = re.sub(r"[^a-z0-9\\s]", "", normalized)
+    return normalized.strip()
+
+
+def find_matching_holding_asset(dividend_asset, holdings):
+    normalized_div = normalize_asset_name(dividend_asset)
+    if not normalized_div:
+        return None
+
+    for asset in holdings["Asset"].astype(str).unique():
+        normalized_hold = normalize_asset_name(asset)
+        if normalized_div == normalized_hold:
+            return asset
+        if normalized_div in normalized_hold or normalized_hold in normalized_div:
+            return asset
+
+    return None
+
+
+def load_dividend_sheet(file_path):
+    try:
+        df = pd.read_excel(file_path, sheet_name=DIVIDEND_INPUT_SHEET)
+    except Exception:
+        return pd.DataFrame()
+
+    df.columns = df.columns.astype(str).str.strip()
+    return df
+
+
+def build_period_returns(history_df, freq, label):
+    if history_df.empty:
+        return pd.DataFrame(columns=[label, "Return %"])
+
+    history = history_df.copy()
+    history["Date"] = pd.to_datetime(history["Date"], errors="coerce")
+    history = history.dropna(subset=["Date"]).sort_values("Date")
+    history = history.set_index("Date")
+    values = pd.to_numeric(history["Portfolio Value"], errors="coerce").fillna(0)
+    if values.empty:
+        return pd.DataFrame(columns=[label, "Return %"])
+
+    if freq == "M":
+        resample_freq = "ME"
+    elif freq == "Q":
+        resample_freq = "QE"
+    else:
+        resample_freq = "YE"
+
+    period_data = values.resample(resample_freq).agg(["first", "last"]).dropna()
+    period_data = period_data[period_data["first"] > 0]
+    period_data["Return %"] = ((period_data["last"] - period_data["first"]) / period_data["first"]) * 100
+
+    if freq == "M":
+        labels = period_data.index.to_period("M").astype(str)
+    elif freq == "Q":
+        labels = period_data.index.to_period("Q").astype(str)
+    else:
+        labels = period_data.index.to_period("Y").astype(str)
+
+    return pd.DataFrame({label: labels, "Return %": period_data["Return %"].round(2).fillna(0)})
+
+
+def build_performance_history(holdings, output_file, current_date, current_value):
+    history = read_previous_sheet(output_file, PERFORMANCE_HISTORY_SHEET, ["Date", "Portfolio Value"])
+    if not history.empty:
+        history["Date"] = pd.to_datetime(history["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    else:
+        history = pd.DataFrame(columns=["Date", "Portfolio Value"])
+
+    latest_entry = pd.DataFrame([{"Date": current_date, "Portfolio Value": current_value}])
+    history = pd.concat([history, latest_entry], ignore_index=True)
+    history["Date"] = pd.to_datetime(history["Date"], errors="coerce")
+    history = history.dropna(subset=["Date"])
+    history["Date"] = history["Date"].dt.strftime("%Y-%m-%d")
+    history = history.drop_duplicates(subset=["Date"], keep="last").sort_values("Date")
+
+    monthly_returns = build_period_returns(history, "M", "Month")
+    quarterly_returns = build_period_returns(history, "Q", "Quarter")
+    yearly_returns = build_period_returns(history, "Y", "Year")
+
+    return history, monthly_returns, quarterly_returns, yearly_returns
+
+
+def build_dividend_table(holdings, dividend_sheet):
+    if dividend_sheet.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    dividends = dividend_sheet.copy()
+    for col in ["Dividend per Share", "Shares", "Total Dividend"]:
+        if col not in dividends.columns:
+            dividends[col] = None
+
+    dividends["Dividend per Share"] = pd.to_numeric(dividends["Dividend per Share"], errors="coerce")
+    dividends["Shares"] = pd.to_numeric(dividends["Shares"], errors="coerce").fillna(0)
+    dividends["Total Dividend"] = pd.to_numeric(dividends["Total Dividend"], errors="coerce")
+
+    dividends["Annual Dividend"] = dividends["Total Dividend"].copy()
+    computed_total = dividends["Dividend per Share"] * dividends["Shares"]
+    use_computed = dividends["Annual Dividend"].isna() | (dividends["Annual Dividend"] == 0)
+    dividends.loc[use_computed, "Annual Dividend"] = computed_total.loc[use_computed]
+    dividends["Annual Dividend"] = dividends["Annual Dividend"].fillna(0)
+
+    market_values = []
+    dividend_yields = []
+    for _, row in dividends.iterrows():
+        holding_asset = find_matching_holding_asset(row.get("Asset"), holdings)
+        if holding_asset is None:
+            market_values.append(None)
+            dividend_yields.append(0)
+            continue
+
+        hold_row = holdings[holdings["Asset"] == holding_asset].iloc[0]
+        market_value = pd.to_numeric(hold_row.get("Market Value"), errors="coerce")
+        market_values.append(market_value)
+        if market_value and market_value > 0:
+            dividend_yields.append((row["Annual Dividend"] / market_value) * 100)
+        else:
+            dividend_yields.append(0)
+
+    dividends["Market Value"] = pd.to_numeric(market_values, errors="coerce")
+    dividends["Dividend Yield %"] = pd.to_numeric(pd.Series(dividend_yields), errors="coerce").fillna(0)
+
+    total_dividend = dividends["Annual Dividend"].sum()
+    total_market_value = holdings["Market Value"].sum()
+    overall_yield = (total_dividend / total_market_value * 100) if total_market_value else 0
+
+    summary = pd.DataFrame({
+        "Metric": ["Total Annual Dividend", "Portfolio Dividend Yield %"],
+        "Value": [total_dividend, overall_yield],
+    })
+
+    return dividends, summary
+
+
+def style_dividends_sheet(worksheet):
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_COLOR),
+        right=Side(style="thin", color=BORDER_COLOR),
+        top=Side(style="thin", color=BORDER_COLOR),
+        bottom=Side(style="thin", color=BORDER_COLOR),
+    )
+    header_fill = PatternFill("solid", fgColor=DARK_OLIVE)
+    odd_fill = PatternFill("solid", fgColor=WARM_BEIGE)
+    even_fill = PatternFill("solid", fgColor=WARM_WHITE)
+
+    worksheet.sheet_view.showGridLines = False
+    worksheet.freeze_panes = "A2"
+
+    widths = {
+        "A": 28,
+        "B": 18,
+        "C": 18,
+        "D": 12,
+        "E": 18,
+        "F": 18,
+        "G": 18,
+    }
+    for column, width in widths.items():
+        worksheet.column_dimensions[column].width = width
+
+    for row in range(1, worksheet.max_row + 1):
+        is_header = row == 1
+        fill = header_fill if is_header else odd_fill if row % 2 == 0 else even_fill
+        font = (
+            Font(name="Georgia", color=CREAM, bold=True)
+            if is_header
+            else Font(name="Georgia", color=TEXT_DARK)
+        )
+
+        for col in range(1, worksheet.max_column + 1):
+            cell = worksheet.cell(row=row, column=col)
+            cell.fill = fill
+            cell.font = font
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal="left" if col == 1 else "center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+    for row in range(2, worksheet.max_row + 1):
+        for col in [3, 4, 5, 6, 7]:
+            try:
+                worksheet.cell(row=row, column=col).number_format = '#,##0.00'
+            except Exception:
+                pass
+
+
+def style_performance_history_sheet(worksheet):
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_COLOR),
+        right=Side(style="thin", color=BORDER_COLOR),
+        top=Side(style="thin", color=BORDER_COLOR),
+        bottom=Side(style="thin", color=BORDER_COLOR),
+    )
+    header_fill = PatternFill("solid", fgColor=DARK_OLIVE)
+    odd_fill = PatternFill("solid", fgColor=WARM_BEIGE)
+    even_fill = PatternFill("solid", fgColor=WARM_WHITE)
+
+    worksheet.sheet_view.showGridLines = False
+    worksheet.freeze_panes = "A2"
+
+    widths = {
+        "A": 18,
+        "B": 18,
+        "C": 16,
+        "D": 16,
+    }
+    for column, width in widths.items():
+        worksheet.column_dimensions[column].width = width
+
+    for row in range(1, worksheet.max_row + 1):
+        is_header = row == 1
+        fill = header_fill if is_header else odd_fill if row % 2 == 0 else even_fill
+        font = (
+            Font(name="Georgia", color=CREAM, bold=True)
+            if is_header
+            else Font(name="Georgia", color=TEXT_DARK)
+        )
+
+        for col in range(1, worksheet.max_column + 1):
+            cell = worksheet.cell(row=row, column=col)
+            cell.fill = fill
+            cell.font = font
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal="left" if col == 1 else "center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+    for row in range(2, worksheet.max_row + 1):
+        for col in [2, 3, 4]:
+            try:
+                worksheet.cell(row=row, column=col).number_format = '#,##0.00'
+            except Exception:
+                pass
+
+
+def add_performance_history_chart(worksheet, history_rows):
+    chart = LineChart()
+    chart.title = "Portfolio Growth"
+    chart.y_axis.title = "Portfolio Value"
+    chart.x_axis.title = "Date"
+    chart.height = 10
+    chart.width = 20
+
+    if history_rows < 2:
+        return
+
+    data = Reference(worksheet, min_col=2, min_row=1, max_row=history_rows + 1)
+    dates = Reference(worksheet, min_col=1, min_row=2, max_row=history_rows + 1)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(dates)
+    worksheet.add_chart(chart, "F2")
+
+
+def style_performance_history_sheet(worksheet):
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_COLOR),
+        right=Side(style="thin", color=BORDER_COLOR),
+        top=Side(style="thin", color=BORDER_COLOR),
+        bottom=Side(style="thin", color=BORDER_COLOR),
+    )
+    header_fill = PatternFill("solid", fgColor=DARK_OLIVE)
+    odd_fill = PatternFill("solid", fgColor=WARM_BEIGE)
+    even_fill = PatternFill("solid", fgColor=WARM_WHITE)
+
+    worksheet.sheet_view.showGridLines = False
+    worksheet.freeze_panes = "A2"
+
+    widths = {
+        "A": 20,
+        "B": 18,
+        "C": 18,
+        "D": 18,
+    }
+    for column, width in widths.items():
+        worksheet.column_dimensions[column].width = width
+
+    for row in range(1, worksheet.max_row + 1):
+        is_header = row == 1
+        fill = header_fill if is_header else odd_fill if row % 2 == 0 else even_fill
+        font = (
+            Font(name="Georgia", color=CREAM, bold=True)
+            if is_header
+            else Font(name="Georgia", color=TEXT_DARK)
+        )
+
+        for col in range(1, worksheet.max_column + 1):
+            cell = worksheet.cell(row=row, column=col)
+            cell.fill = fill
+            cell.font = font
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal="left" if col == 1 else "center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+    for row in range(2, worksheet.max_row + 1):
+        for col in [2, 3, 4]:
+            try:
+                worksheet.cell(row=row, column=col).number_format = '#,##0.00'
+            except Exception:
+                pass
+
+
+def style_holdings_sheet(worksheet):
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_COLOR),
+        right=Side(style="thin", color=BORDER_COLOR),
+        top=Side(style="thin", color=BORDER_COLOR),
+        bottom=Side(style="thin", color=BORDER_COLOR),
+    )
+    header_fill = PatternFill("solid", fgColor=DARK_OLIVE)
+    odd_fill = PatternFill("solid", fgColor=WARM_BEIGE)
+    even_fill = PatternFill("solid", fgColor=WARM_WHITE)
+
+    worksheet.sheet_view.showGridLines = False
+    worksheet.freeze_panes = "A2"
+
+    # sensible defaults for common holdings columns
+    widths = {
+        "A": 28,
+        "B": 18,
+        "C": 12,
+        "D": 14,
+        "E": 14,
+        "F": 18,
+        "G": 16,
+        "H": 16,
+    }
+    for column, width in widths.items():
+        worksheet.column_dimensions[column].width = width
+
+    for row in range(1, worksheet.max_row + 1):
+        is_header = row == 1
+        fill = header_fill if is_header else odd_fill if row % 2 == 0 else even_fill
+        font = (
+            Font(name="Georgia", color=CREAM, bold=True)
+            if is_header
+            else Font(name="Georgia", color=TEXT_DARK)
+        )
+
+        for col in range(1, worksheet.max_column + 1):
+            cell = worksheet.cell(row=row, column=col)
+            cell.fill = fill
+            cell.font = font
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal="left" if col == 1 else "center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+    # Apply number formats based on header names
+    headers = [
+        worksheet.cell(row=1, column=col).value
+        for col in range(1, worksheet.max_column + 1)
+    ]
+    header_to_format = {
+        "Shares": '#,##0',
+        "Buy Price": '#,##0.00',
+        "Current Price": '#,##0.00',
+        "Market Value": '#,##0.00',
+        "Gain/Loss": '#,##0.00',
+        "Asset Allocation %": '0.00"%"',
+        "Asset Allocation%": '0.00"%"',
+        "Average Return %": '0.00"%"',
+    }
+
+    for idx, h in enumerate(headers, start=1):
+        if h in header_to_format:
+            for row in range(2, worksheet.max_row + 1):
+                try:
+                    worksheet.cell(row=row, column=idx).number_format = header_to_format[h]
+                except Exception:
+                    pass
+
+
 def add_dashboard_charts(
     file_path,
     asset_count,
@@ -960,6 +1348,7 @@ def add_dashboard_charts(
     asset_violation_count,
     sector_violation_count,
     suggestion_count,
+    performance_history_count,
 ):
     workbook = load_workbook(file_path)
     worksheet = workbook["Dashboard1"]
@@ -1034,6 +1423,16 @@ def add_dashboard_charts(
 
     if "NSE_Prices" in workbook.sheetnames:
         style_nse_prices_sheet(workbook["NSE_Prices"])
+
+    if DIVIDEND_OUTPUT_SHEET in workbook.sheetnames:
+        style_dividends_sheet(workbook[DIVIDEND_OUTPUT_SHEET])
+
+    if PERFORMANCE_HISTORY_SHEET in workbook.sheetnames:
+        style_performance_history_sheet(workbook[PERFORMANCE_HISTORY_SHEET])
+        add_performance_history_chart(workbook[PERFORMANCE_HISTORY_SHEET], performance_history_count)
+
+    if "Holdings" in workbook.sheetnames:
+        style_holdings_sheet(workbook["Holdings"])
 
     if STATE_SHEET in workbook.sheetnames:
         workbook[STATE_SHEET].sheet_state = "hidden"
@@ -1145,6 +1544,16 @@ print("\n--- CLEAN ASSET ALLOCATION ---")
 print(holdings[["Asset", "Market Value", "Asset Allocation %"]])
 
 # -----------------------------
+# RETURNS: Average return per asset (percentage)
+# -----------------------------
+buy_prices = pd.to_numeric(holdings.get("Buy Price", 0), errors="coerce").fillna(0)
+current_prices = pd.to_numeric(holdings.get("Current Price", 0), errors="coerce").fillna(0)
+returns = pd.Series(0.0, index=holdings.index)
+nonzero_buy = buy_prices != 0
+returns.loc[nonzero_buy] = ((current_prices.loc[nonzero_buy] - buy_prices.loc[nonzero_buy]) / buy_prices.loc[nonzero_buy]) * 100
+holdings["Average Return %"] = returns.fillna(0)
+
+# -----------------------------
 # SECTOR ALLOCATION
 # -----------------------------
 if "Sector" not in holdings.columns:
@@ -1180,6 +1589,19 @@ risk_summary, asset_violations, sector_violations = build_risk_engine(
 )
 rebalance_plan = build_rebalance_plan(holdings, total_value, sector_risk_total)
 current_state = build_current_state(holdings)
+
+# Load dividend tracking data and calculate annual dividends and yield
+dividend_sheet = load_dividend_sheet(input_file)
+dividend_table, dividend_summary = build_dividend_table(holdings, dividend_sheet)
+
+current_date = datetime.now().strftime("%Y-%m-%d")
+performance_history, monthly_returns, quarterly_returns, yearly_returns = build_performance_history(
+    holdings,
+    output_file,
+    current_date,
+    total_value,
+)
+
 previous_state = read_previous_sheet(output_file, STATE_SHEET, STATE_COLUMNS)
 existing_transactions = read_previous_sheet(
     output_file,
@@ -1306,6 +1728,58 @@ with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
         startrow=ASSET_TABLE_START_ROW,
         index=False,
     )
+    # Also include the full Holdings table in the output workbook
+    try:
+        holdings.to_excel(
+            writer,
+            sheet_name="Holdings",
+            index=False,
+        )
+    except Exception:
+        # Fallback: write a minimal holdings view if full export fails
+        holdings[["Asset", "Shares", "Current Price", "Market Value"]].to_excel(
+            writer,
+            sheet_name="Holdings",
+            index=False,
+        )
+
+    if not dividend_table.empty:
+        dividend_table.to_excel(
+            writer,
+            sheet_name=DIVIDEND_OUTPUT_SHEET,
+            index=False,
+        )
+        dividend_summary.to_excel(
+            writer,
+            sheet_name=DIVIDEND_OUTPUT_SHEET,
+            startrow=len(dividend_table) + 3,
+            index=False,
+        )
+
+    performance_history.to_excel(
+        writer,
+        sheet_name=PERFORMANCE_HISTORY_SHEET,
+        index=False,
+    )
+    monthly_returns.to_excel(
+        writer,
+        sheet_name=PERFORMANCE_HISTORY_SHEET,
+        startrow=len(performance_history) + 3,
+        index=False,
+    )
+    quarterly_returns.to_excel(
+        writer,
+        sheet_name=PERFORMANCE_HISTORY_SHEET,
+        startrow=len(performance_history) + len(monthly_returns) + 7,
+        index=False,
+    )
+    yearly_returns.to_excel(
+        writer,
+        sheet_name=PERFORMANCE_HISTORY_SHEET,
+        startrow=len(performance_history) + len(monthly_returns) + len(quarterly_returns) + 11,
+        index=False,
+    )
+
     sector_table.to_excel(
         writer,
         sheet_name="Dashboard1",
@@ -1362,6 +1836,7 @@ add_dashboard_charts(
     len(asset_violations),
     len(sector_violations),
     len(rebalance_plan),
+    len(performance_history),
 )
 
 print("\nDashboard Generated Successfully.")
