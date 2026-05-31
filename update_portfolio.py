@@ -1,6 +1,7 @@
 import os
 import shutil
 import ast
+import math
 import operator
 import re
 from datetime import datetime
@@ -16,6 +17,8 @@ ASSET_TABLE_START_ROW = 8
 SECTOR_WEIGHT_LIMIT = 20
 SINGLE_ASSET_WEIGHT_LIMIT = 10
 SECTOR_RISK_EXCLUSIONS = {"Cash", "Fixed Income"}
+TRANSACTIONS_SHEET = "Transactions"
+STATE_SHEET = "Portfolio_State"
 SECTOR_LABELS = {
     "Banking": "Banking",
     "Telecommunication": "Telecom",
@@ -33,6 +36,25 @@ WARM_BEIGE = "E6DFD3"
 WARM_WHITE = "FDFBF7"
 SOFT_BEIGE = "EAECE6"
 BORDER_COLOR = "B8AA91"
+TRANSACTION_BASE_COLUMNS = [
+    "Date",
+    "Asset",
+    "Action",
+    "Quantity",
+    "Price",
+    "Broker",
+    "Fees",
+    "Benefits",
+]
+TRANSACTION_CALC_COLUMNS = [
+    "Realized Gain",
+    "Unrealized Gain",
+    "Cost Basis",
+    "Average Purchase Price",
+    "Position Quantity",
+]
+TRANSACTION_COLUMNS = TRANSACTION_BASE_COLUMNS + TRANSACTION_CALC_COLUMNS
+STATE_COLUMNS = ["Asset", "Sector", "Shares", "Current Price", "Market Value"]
 
 ALLOWED_OPERATORS = {
     ast.Add: operator.add,
@@ -123,6 +145,151 @@ def formula_backed_column_values(file_path, sheet_name, header_idx, column_index
     return pd.Series(pd.to_numeric(values, errors="coerce"))
 
 
+def empty_transactions():
+    return pd.DataFrame(columns=TRANSACTION_COLUMNS)
+
+
+def read_previous_sheet(file_path, sheet_name, columns):
+    if not os.path.exists(file_path):
+        return pd.DataFrame(columns=columns)
+
+    try:
+        workbook = pd.ExcelFile(file_path)
+        if sheet_name not in workbook.sheet_names:
+            return pd.DataFrame(columns=columns)
+
+        data = pd.read_excel(file_path, sheet_name=sheet_name)
+    except Exception:
+        return pd.DataFrame(columns=columns)
+
+    for column in columns:
+        if column not in data.columns:
+            data[column] = None
+
+    return data[columns].copy()
+
+
+def build_current_state(holdings):
+    state = holdings[STATE_COLUMNS].copy()
+    state["Shares"] = pd.to_numeric(state["Shares"], errors="coerce").fillna(0)
+    state["Current Price"] = pd.to_numeric(
+        state["Current Price"],
+        errors="coerce",
+    ).fillna(0)
+    state["Market Value"] = pd.to_numeric(
+        state["Market Value"],
+        errors="coerce",
+    ).fillna(0)
+    return state
+
+
+def detect_share_transactions(previous_state, current_state):
+    if previous_state.empty:
+        return pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
+
+    previous_state = previous_state.set_index("Asset", drop=False)
+    current_state = current_state.set_index("Asset", drop=False)
+    transaction_rows = []
+    transaction_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    for asset in sorted(set(previous_state.index).union(current_state.index)):
+        previous_row = previous_state.loc[asset] if asset in previous_state.index else None
+        current_row = current_state.loc[asset] if asset in current_state.index else None
+
+        previous_shares = (
+            pd.to_numeric(previous_row["Shares"], errors="coerce")
+            if previous_row is not None
+            else 0
+        )
+        current_shares = (
+            pd.to_numeric(current_row["Shares"], errors="coerce")
+            if current_row is not None
+            else 0
+        )
+        previous_shares = 0 if pd.isna(previous_shares) else previous_shares
+        current_shares = 0 if pd.isna(current_shares) else current_shares
+        share_change = current_shares - previous_shares
+
+        if abs(share_change) < 0.000001:
+            continue
+
+        price_source = current_row if current_row is not None else previous_row
+        price = pd.to_numeric(price_source["Current Price"], errors="coerce")
+        price = 0 if pd.isna(price) else price
+
+        transaction_rows.append({
+            "Date": transaction_date,
+            "Asset": asset,
+            "Action": "BUY" if share_change > 0 else "SELL",
+            "Quantity": abs(share_change),
+            "Price": price,
+            "Broker": "",
+            "Fees": 0,
+            "Benefits": "",
+        })
+
+    return pd.DataFrame(transaction_rows, columns=TRANSACTION_BASE_COLUMNS)
+
+
+def calculate_transaction_metrics(transactions, current_state):
+    if transactions.empty:
+        return empty_transactions()
+
+    transactions = transactions.copy()
+
+    for column in TRANSACTION_BASE_COLUMNS:
+        if column not in transactions.columns:
+            transactions[column] = "" if column in ["Date", "Asset", "Action", "Broker", "Benefits"] else 0
+
+    current_prices = current_state.set_index("Asset")["Current Price"].to_dict()
+    positions = {}
+    cost_bases = {}
+    calculated_rows = []
+
+    for _, transaction in transactions[TRANSACTION_BASE_COLUMNS].iterrows():
+        asset = transaction["Asset"]
+        action = str(transaction["Action"]).upper()
+        quantity = pd.to_numeric(transaction["Quantity"], errors="coerce")
+        price = pd.to_numeric(transaction["Price"], errors="coerce")
+        fees = pd.to_numeric(transaction["Fees"], errors="coerce")
+        quantity = 0 if pd.isna(quantity) else quantity
+        price = 0 if pd.isna(price) else price
+        fees = 0 if pd.isna(fees) else fees
+
+        position_quantity = positions.get(asset, 0)
+        cost_basis = cost_bases.get(asset, 0)
+        average_price = cost_basis / position_quantity if position_quantity else 0
+        realized_gain = 0
+
+        if action == "BUY":
+            position_quantity += quantity
+            cost_basis += (quantity * price) + fees
+        elif action == "SELL":
+            cost_removed = average_price * min(quantity, position_quantity)
+            realized_gain = (quantity * price) - fees - cost_removed
+            position_quantity -= quantity
+            cost_basis = max(0, cost_basis - cost_removed)
+
+        average_price = cost_basis / position_quantity if position_quantity else 0
+        current_price = current_prices.get(asset, price)
+        unrealized_gain = (position_quantity * current_price) - cost_basis
+
+        positions[asset] = position_quantity
+        cost_bases[asset] = cost_basis
+
+        row = transaction.to_dict()
+        row.update({
+            "Realized Gain": realized_gain,
+            "Unrealized Gain": unrealized_gain,
+            "Cost Basis": cost_basis,
+            "Average Purchase Price": average_price,
+            "Position Quantity": position_quantity,
+        })
+        calculated_rows.append(row)
+
+    return pd.DataFrame(calculated_rows, columns=TRANSACTION_COLUMNS)
+
+
 def risk_label_from_score(score):
     if score >= 85:
         return "Low"
@@ -144,20 +311,6 @@ def add_dynamic_asset_limits(holdings):
     return holdings
 
 
-def suggested_buy_assets(holdings, excluded_asset=None, excluded_sector=None):
-    candidates = holdings[
-        (holdings["Asset"] != excluded_asset)
-        & (holdings["Asset Allocation %"] < holdings["Asset Limit %"])
-        & (~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS))
-    ].copy()
-
-    if excluded_sector is not None:
-        candidates = candidates[candidates["Sector"] != excluded_sector]
-
-    candidates = candidates.sort_values("Asset Allocation %")
-    return ", ".join(candidates["Asset"].head(3))
-
-
 def sell_amount_to_limit(current_value, total_value, limit_percent):
     limit = limit_percent / 100
 
@@ -176,6 +329,115 @@ def buy_amount_to_limit(current_value, total_value, limit_percent):
     return max(0, (current_value / limit) - total_value)
 
 
+def build_rebalance_plan(holdings, total_value, sector_risk_total):
+    risk_pool = holdings[~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS)].copy()
+    risk_pool = add_dynamic_asset_limits(risk_pool)
+
+    sector_cap_value = (SECTOR_WEIGHT_LIMIT / 100) * total_value
+    targets = risk_pool.set_index("Asset")["Market Value"].to_dict()
+    asset_caps = (
+        risk_pool.set_index("Asset")["Asset Limit %"] / 100 * total_value
+    ).to_dict()
+    asset_sectors = risk_pool.set_index("Asset")["Sector"].to_dict()
+
+    for asset, cap_value in asset_caps.items():
+        targets[asset] = min(targets[asset], cap_value)
+
+    for sector, sector_assets in risk_pool.groupby("Sector")["Asset"]:
+        sector_target = sum(targets[asset] for asset in sector_assets)
+        if sector_target > sector_cap_value and sector_target > 0:
+            scale_factor = sector_cap_value / sector_target
+            for asset in sector_assets:
+                targets[asset] *= scale_factor
+
+    proceeds = sum(
+        max(0, row["Market Value"] - targets[row["Asset"]])
+        for _, row in risk_pool.iterrows()
+    )
+    remaining_cash = proceeds
+
+    sector_targets = {
+        sector: sum(targets[asset] for asset in sector_assets)
+        for sector, sector_assets in risk_pool.groupby("Sector")["Asset"]
+    }
+
+    candidates = risk_pool.sort_values("Asset Allocation %")
+    for _, candidate in candidates.iterrows():
+        if remaining_cash <= 0:
+            break
+
+        asset = candidate["Asset"]
+        sector = candidate["Sector"]
+        asset_capacity = max(0, asset_caps[asset] - targets[asset])
+        sector_capacity = max(0, sector_cap_value - sector_targets.get(sector, 0))
+        buy_value = min(remaining_cash, asset_capacity, sector_capacity)
+
+        if buy_value <= 0:
+            continue
+
+        targets[asset] += buy_value
+        sector_targets[sector] = sector_targets.get(sector, 0) + buy_value
+        remaining_cash -= buy_value
+
+    trades = []
+    for _, row in risk_pool.iterrows():
+        asset = row["Asset"]
+        trade_value = targets[asset] - row["Market Value"]
+
+        if abs(trade_value) < 1 or row["Current Price"] <= 0:
+            continue
+
+        action = "BUY" if trade_value > 0 else "SELL"
+        shares = math.ceil(abs(trade_value) / row["Current Price"])
+        estimated_value = shares * row["Current Price"]
+        reason = (
+            "Redeploy proceeds into an under-limit asset"
+            if action == "BUY"
+            else "Reduce asset/sector concentration"
+        )
+
+        trades.append({
+            "Action": action,
+            "Asset": asset,
+            "Sector": row["Sector"],
+            "Shares": shares,
+            "Current Price": row["Current Price"],
+            "Estimated Value": estimated_value,
+            "Reason": reason,
+        })
+
+    if remaining_cash > 1:
+        cash_assets = holdings[
+            holdings["Sector"].eq("Cash") & (holdings["Current Price"] > 0)
+        ].copy()
+
+        if not cash_assets.empty:
+            cash_asset = cash_assets.iloc[0]
+            shares = math.ceil(remaining_cash / cash_asset["Current Price"])
+            trades.append({
+                "Action": "BUY",
+                "Asset": cash_asset["Asset"],
+                "Sector": cash_asset["Sector"],
+                "Shares": shares,
+                "Current Price": cash_asset["Current Price"],
+                "Estimated Value": shares * cash_asset["Current Price"],
+                "Reason": "Hold remaining proceeds without adding concentration risk",
+            })
+
+    return pd.DataFrame(
+        trades,
+        columns=[
+            "Action",
+            "Asset",
+            "Sector",
+            "Shares",
+            "Current Price",
+            "Estimated Value",
+            "Reason",
+        ],
+    )
+
+
 def build_risk_engine(holdings, sector_risk_alloc_pct, total_value, sector_risk_total):
     asset_risk_pool = holdings[~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS)].copy()
     asset_risk_pool = add_dynamic_asset_limits(asset_risk_pool)
@@ -185,33 +447,6 @@ def build_risk_engine(holdings, sector_risk_alloc_pct, total_value, sector_risk_
     asset_violations["Excess %"] = (
         asset_violations["Asset Allocation %"] - asset_violations["Asset Limit %"]
     )
-    asset_violations["Sell To Fix"] = asset_violations.apply(
-        lambda row: format_money(
-            sell_amount_to_limit(row["Market Value"], total_value, row["Asset Limit %"])
-        ),
-        axis=1,
-    )
-    asset_violations["Buy Elsewhere To Fix"] = asset_violations.apply(
-        lambda row: format_money(
-            buy_amount_to_limit(row["Market Value"], total_value, row["Asset Limit %"])
-        ),
-        axis=1,
-    )
-    asset_violations["Buy Candidates"] = asset_violations.apply(
-        lambda row: suggested_buy_assets(
-            asset_risk_pool,
-            excluded_asset=row["Asset"],
-            excluded_sector=row["Sector"],
-        ),
-        axis=1,
-    )
-    asset_violations["Suggested Fix"] = asset_violations.apply(
-        lambda row: (
-            f"Sell {row['Sell To Fix']} of {row['Asset']} or buy "
-            f"{row['Buy Elsewhere To Fix']} across {row['Buy Candidates']}."
-        ),
-        axis=1,
-    )
     asset_violations = asset_violations[
         [
             "Asset",
@@ -219,10 +454,6 @@ def build_risk_engine(holdings, sector_risk_alloc_pct, total_value, sector_risk_
             "Asset Allocation %",
             "Asset Limit %",
             "Excess %",
-            "Sell To Fix",
-            "Buy Elsewhere To Fix",
-            "Buy Candidates",
-            "Suggested Fix",
         ]
     ]
 
@@ -232,26 +463,10 @@ def build_risk_engine(holdings, sector_risk_alloc_pct, total_value, sector_risk_
     sector_violations.columns = ["Sector", "Sector Weight %"]
     sector_violations["Sector Value"] = (
         sector_violations["Sector Weight %"] / 100
-    ) * sector_risk_total
+    ) * total_value
     sector_violations["Limit %"] = SECTOR_WEIGHT_LIMIT
     sector_violations["Excess %"] = (
         sector_violations["Sector Weight %"] - SECTOR_WEIGHT_LIMIT
-    )
-    sector_violations["Sell From Sector"] = sector_violations["Sector Value"].apply(
-        lambda value: format_money(sell_amount_to_limit(value, sector_risk_total, SECTOR_WEIGHT_LIMIT))
-    )
-    sector_violations["Buy Outside Sector"] = sector_violations["Sector Value"].apply(
-        lambda value: format_money(buy_amount_to_limit(value, sector_risk_total, SECTOR_WEIGHT_LIMIT))
-    )
-    sector_violations["Buy Candidates"] = sector_violations["Sector"].apply(
-        lambda sector: suggested_buy_assets(asset_risk_pool, excluded_sector=sector)
-    )
-    sector_violations["Suggested Fix"] = sector_violations.apply(
-        lambda row: (
-            f"Sell {row['Sell From Sector']} from {row['Sector']} or buy "
-            f"{row['Buy Outside Sector']} across {row['Buy Candidates']}."
-        ),
-        axis=1,
     )
     sector_violations = sector_violations[
         [
@@ -259,10 +474,6 @@ def build_risk_engine(holdings, sector_risk_alloc_pct, total_value, sector_risk_
             "Sector Weight %",
             "Limit %",
             "Excess %",
-            "Sell From Sector",
-            "Buy Outside Sector",
-            "Buy Candidates",
-            "Suggested Fix",
         ]
     ]
 
@@ -303,6 +514,7 @@ def style_dashboard_sheet(
     risk_summary_count,
     asset_violation_count,
     sector_violation_count,
+    suggestion_count,
 ):
     thin_border = Border(
         left=Side(style="thin", color=BORDER_COLOR),
@@ -333,8 +545,8 @@ def style_dashboard_sheet(
         "E": 28,
         "F": 18,
         "G": 22,
-        "H": 65,
-        "I": 65,
+        "H": 42,
+        "I": 18,
         "J": 18,
     }
     for column, width in widths.items():
@@ -356,12 +568,17 @@ def style_dashboard_sheet(
         (
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + 10,
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + 10 + asset_violation_count,
-            9,
+            5,
         ),
         (
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + asset_violation_count + 13,
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + asset_violation_count + 13 + sector_violation_count,
-            8,
+            4,
+        ),
+        (
+            ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + asset_violation_count + sector_violation_count + 16,
+            ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + asset_violation_count + sector_violation_count + 16 + suggestion_count,
+            7,
         ),
     ]
 
@@ -383,7 +600,7 @@ def style_dashboard_sheet(
                 cell.alignment = Alignment(
                     horizontal="left" if col == 1 else "center",
                     vertical="center",
-                    wrap_text=col >= 8,
+                    wrap_text=col >= 7,
                 )
 
     for row in range(SUMMARY_START_ROW + 2, SUMMARY_START_ROW + 5):
@@ -401,6 +618,21 @@ def style_dashboard_sheet(
     risk_summary_header_row = ASSET_TABLE_START_ROW + asset_count + sector_count + 7
     asset_risk_header_row = risk_summary_header_row + risk_summary_count + 3
     sector_risk_header_row = asset_risk_header_row + asset_violation_count + 3
+    suggestion_header_row = sector_risk_header_row + sector_violation_count + 3
+    suggestion_title_row = suggestion_header_row - 1
+
+    worksheet.merge_cells(
+        start_row=suggestion_title_row,
+        start_column=1,
+        end_row=suggestion_title_row,
+        end_column=7,
+    )
+    suggestion_title = worksheet.cell(row=suggestion_title_row, column=1)
+    suggestion_title.value = "Holistic Rebalance Suggestion"
+    suggestion_title.fill = title_fill
+    suggestion_title.font = Font(name="Georgia", color=CREAM, bold=True, size=12)
+    suggestion_title.alignment = Alignment(horizontal="center", vertical="center")
+    worksheet.row_dimensions[suggestion_title_row].height = 22
 
     for row in range(asset_risk_header_row + 1, asset_risk_header_row + 1 + asset_violation_count):
         worksheet.cell(row=row, column=3).number_format = '0.00"%"'
@@ -412,11 +644,16 @@ def style_dashboard_sheet(
         worksheet.cell(row=row, column=3).number_format = '0.00"%"'
         worksheet.cell(row=row, column=4).number_format = '0.00"%"'
 
+    for row in range(suggestion_header_row + 1, suggestion_header_row + 1 + suggestion_count):
+        worksheet.cell(row=row, column=4).number_format = '#,##0'
+        worksheet.cell(row=row, column=5).number_format = '#,##0.00'
+        worksheet.cell(row=row, column=6).number_format = '#,##0.00'
+
     for row in range(1, worksheet.max_row + 1):
         worksheet.row_dimensions[row].height = 18
     worksheet.row_dimensions[1].height = 25
 
-    for row in range(asset_risk_header_row + 1, sector_risk_header_row + sector_violation_count + 1):
+    for row in range(suggestion_header_row + 1, suggestion_header_row + suggestion_count + 1):
         worksheet.row_dimensions[row].height = 36
 
 
@@ -427,6 +664,7 @@ def add_dashboard_charts(
     risk_summary_count,
     asset_violation_count,
     sector_violation_count,
+    suggestion_count,
 ):
     workbook = load_workbook(file_path)
     worksheet = workbook["Dashboard1"]
@@ -437,6 +675,7 @@ def add_dashboard_charts(
         risk_summary_count,
         asset_violation_count,
         sector_violation_count,
+        suggestion_count,
     )
 
     asset_header_row = ASSET_TABLE_START_ROW + 1
@@ -624,7 +863,7 @@ sector_risk_total = sector_risk_alloc.sum()
 if sector_risk_total == 0:
     sector_risk_alloc_pct = sector_risk_alloc * 0
 else:
-    sector_risk_alloc_pct = (sector_risk_alloc / sector_risk_total) * 100
+    sector_risk_alloc_pct = (sector_risk_alloc / total_value) * 100
 
 risk_summary, asset_violations, sector_violations = build_risk_engine(
     holdings,
@@ -632,6 +871,7 @@ risk_summary, asset_violations, sector_violations = build_risk_engine(
     total_value,
     sector_risk_total,
 )
+rebalance_plan = build_rebalance_plan(holdings, total_value, sector_risk_total)
 
 print("\n--- RISK CHECK (DYNAMIC ASSET RULE) ---")
 
@@ -649,6 +889,12 @@ else:
 
 print("\n--- RISK SCORE ---")
 print(risk_summary)
+
+print("\n--- HOLISTIC REBALANCE SUGGESTION ---")
+if rebalance_plan.empty:
+    print("No trades needed.")
+else:
+    print(rebalance_plan)
 
 # -----------------------------
 # PLOTS (SAFE GUARDS FIX)
@@ -702,6 +948,7 @@ sector_table.columns = ["Sector", "Allocation %"]
 risk_summary_startrow = ASSET_TABLE_START_ROW + len(asset_table) + len(sector_table) + 6
 asset_violations_startrow = risk_summary_startrow + len(risk_summary) + 3
 sector_violations_startrow = asset_violations_startrow + len(asset_violations) + 3
+rebalance_plan_startrow = sector_violations_startrow + len(sector_violations) + 3
 
 with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
     summary_df.to_excel(
@@ -740,6 +987,12 @@ with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
         startrow=sector_violations_startrow,
         index=False,
     )
+    rebalance_plan.to_excel(
+        writer,
+        sheet_name="Dashboard1",
+        startrow=rebalance_plan_startrow,
+        index=False,
+    )
 
 add_dashboard_charts(
     output_file,
@@ -748,6 +1001,7 @@ add_dashboard_charts(
     len(risk_summary),
     len(asset_violations),
     len(sector_violations),
+    len(rebalance_plan),
 )
 
 print("\nDashboard Generated Successfully.")
