@@ -13,9 +13,18 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 CELL_REF_RE = re.compile(r"(?<![A-Za-z0-9_])(\$?[A-Z]{1,3}\$?\d+)(?![A-Za-z0-9_])")
 SUMMARY_START_ROW = 2
 ASSET_TABLE_START_ROW = 8
-ASSET_WEIGHT_LIMIT = 5
 SECTOR_WEIGHT_LIMIT = 20
+SINGLE_ASSET_WEIGHT_LIMIT = 10
 SECTOR_RISK_EXCLUSIONS = {"Cash", "Fixed Income"}
+SECTOR_LABELS = {
+    "Banking": "Banking",
+    "Telecommunication": "Telecom",
+    "Insurance": "Insurance",
+    "Energy": "Energy",
+    "ETFs": "ETF",
+    "Fixed Income": "Fixed Income",
+    "Liquid Cash": "Cash",
+}
 
 DARK_OLIVE = "3B4436"
 CREAM = "F1E9CB"
@@ -122,27 +131,140 @@ def risk_label_from_score(score):
     return "High"
 
 
-def build_risk_engine(holdings, sector_risk_alloc_pct):
+def format_money(value):
+    return f"KES {value:,.2f}"
+
+
+def add_dynamic_asset_limits(holdings):
+    holdings = holdings.copy()
+    sector_asset_counts = holdings.groupby("Sector")["Asset"].transform("count")
+    holdings["Asset Limit %"] = (
+        SECTOR_WEIGHT_LIMIT / sector_asset_counts
+    ).clip(upper=SINGLE_ASSET_WEIGHT_LIMIT)
+    return holdings
+
+
+def suggested_buy_assets(holdings, excluded_asset=None, excluded_sector=None):
+    candidates = holdings[
+        (holdings["Asset"] != excluded_asset)
+        & (holdings["Asset Allocation %"] < holdings["Asset Limit %"])
+        & (~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS))
+    ].copy()
+
+    if excluded_sector is not None:
+        candidates = candidates[candidates["Sector"] != excluded_sector]
+
+    candidates = candidates.sort_values("Asset Allocation %")
+    return ", ".join(candidates["Asset"].head(3))
+
+
+def sell_amount_to_limit(current_value, total_value, limit_percent):
+    limit = limit_percent / 100
+
+    if limit >= 1:
+        return 0
+
+    return max(0, (current_value - (limit * total_value)) / (1 - limit))
+
+
+def buy_amount_to_limit(current_value, total_value, limit_percent):
+    limit = limit_percent / 100
+
+    if limit <= 0:
+        return 0
+
+    return max(0, (current_value / limit) - total_value)
+
+
+def build_risk_engine(holdings, sector_risk_alloc_pct, total_value, sector_risk_total):
     asset_risk_pool = holdings[~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS)].copy()
+    asset_risk_pool = add_dynamic_asset_limits(asset_risk_pool)
     asset_violations = asset_risk_pool[
-        asset_risk_pool["Asset Allocation %"] > ASSET_WEIGHT_LIMIT
-    ][["Asset", "Sector", "Asset Allocation %"]].copy()
-    asset_violations["Limit %"] = ASSET_WEIGHT_LIMIT
+        asset_risk_pool["Asset Allocation %"] > asset_risk_pool["Asset Limit %"]
+    ][["Asset", "Sector", "Market Value", "Asset Allocation %", "Asset Limit %"]].copy()
     asset_violations["Excess %"] = (
-        asset_violations["Asset Allocation %"] - ASSET_WEIGHT_LIMIT
+        asset_violations["Asset Allocation %"] - asset_violations["Asset Limit %"]
+    )
+    asset_violations["Sell To Fix"] = asset_violations.apply(
+        lambda row: format_money(
+            sell_amount_to_limit(row["Market Value"], total_value, row["Asset Limit %"])
+        ),
+        axis=1,
+    )
+    asset_violations["Buy Elsewhere To Fix"] = asset_violations.apply(
+        lambda row: format_money(
+            buy_amount_to_limit(row["Market Value"], total_value, row["Asset Limit %"])
+        ),
+        axis=1,
+    )
+    asset_violations["Buy Candidates"] = asset_violations.apply(
+        lambda row: suggested_buy_assets(
+            asset_risk_pool,
+            excluded_asset=row["Asset"],
+            excluded_sector=row["Sector"],
+        ),
+        axis=1,
+    )
+    asset_violations["Suggested Fix"] = asset_violations.apply(
+        lambda row: (
+            f"Sell {row['Sell To Fix']} of {row['Asset']} or buy "
+            f"{row['Buy Elsewhere To Fix']} across {row['Buy Candidates']}."
+        ),
+        axis=1,
     )
     asset_violations = asset_violations[
-        ["Asset", "Sector", "Asset Allocation %", "Limit %", "Excess %"]
+        [
+            "Asset",
+            "Sector",
+            "Asset Allocation %",
+            "Asset Limit %",
+            "Excess %",
+            "Sell To Fix",
+            "Buy Elsewhere To Fix",
+            "Buy Candidates",
+            "Suggested Fix",
+        ]
     ]
 
     sector_violations = sector_risk_alloc_pct[
         sector_risk_alloc_pct > SECTOR_WEIGHT_LIMIT
     ].reset_index()
     sector_violations.columns = ["Sector", "Sector Weight %"]
+    sector_violations["Sector Value"] = (
+        sector_violations["Sector Weight %"] / 100
+    ) * sector_risk_total
     sector_violations["Limit %"] = SECTOR_WEIGHT_LIMIT
     sector_violations["Excess %"] = (
         sector_violations["Sector Weight %"] - SECTOR_WEIGHT_LIMIT
     )
+    sector_violations["Sell From Sector"] = sector_violations["Sector Value"].apply(
+        lambda value: format_money(sell_amount_to_limit(value, sector_risk_total, SECTOR_WEIGHT_LIMIT))
+    )
+    sector_violations["Buy Outside Sector"] = sector_violations["Sector Value"].apply(
+        lambda value: format_money(buy_amount_to_limit(value, sector_risk_total, SECTOR_WEIGHT_LIMIT))
+    )
+    sector_violations["Buy Candidates"] = sector_violations["Sector"].apply(
+        lambda sector: suggested_buy_assets(asset_risk_pool, excluded_sector=sector)
+    )
+    sector_violations["Suggested Fix"] = sector_violations.apply(
+        lambda row: (
+            f"Sell {row['Sell From Sector']} from {row['Sector']} or buy "
+            f"{row['Buy Outside Sector']} across {row['Buy Candidates']}."
+        ),
+        axis=1,
+    )
+    sector_violations = sector_violations[
+        [
+            "Sector",
+            "Sector Weight %",
+            "Limit %",
+            "Excess %",
+            "Sell From Sector",
+            "Buy Outside Sector",
+            "Buy Candidates",
+            "Suggested Fix",
+        ]
+    ]
 
     diversification_score = max(
         0,
@@ -154,14 +276,16 @@ def build_risk_engine(holdings, sector_risk_alloc_pct):
         "Metric": [
             "Asset Limit",
             "Sector Limit",
+            "Single-Asset Cap",
             "Asset Violations",
             "Sector Violations",
             "Diversification Score",
             "Risk Score",
         ],
         "Value": [
-            f"{ASSET_WEIGHT_LIMIT}%",
+            "Sector limit / asset count",
             f"{SECTOR_WEIGHT_LIMIT}%",
+            f"{SINGLE_ASSET_WEIGHT_LIMIT}%",
             len(asset_violations),
             len(sector_violations),
             f"{diversification_score} / 100",
@@ -205,12 +329,12 @@ def style_dashboard_sheet(
         "A": 28,
         "B": 18,
         "C": 22,
-        "D": 3,
+        "D": 14,
         "E": 28,
         "F": 18,
-        "G": 18,
-        "H": 18,
-        "I": 18,
+        "G": 22,
+        "H": 65,
+        "I": 65,
         "J": 18,
     }
     for column, width in widths.items():
@@ -232,12 +356,12 @@ def style_dashboard_sheet(
         (
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + 10,
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + 10 + asset_violation_count,
-            5,
+            9,
         ),
         (
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + asset_violation_count + 13,
             ASSET_TABLE_START_ROW + asset_count + sector_count + risk_summary_count + asset_violation_count + 13 + sector_violation_count,
-            4,
+            8,
         ),
     ]
 
@@ -259,6 +383,7 @@ def style_dashboard_sheet(
                 cell.alignment = Alignment(
                     horizontal="left" if col == 1 else "center",
                     vertical="center",
+                    wrap_text=col >= 8,
                 )
 
     for row in range(SUMMARY_START_ROW + 2, SUMMARY_START_ROW + 5):
@@ -290,6 +415,9 @@ def style_dashboard_sheet(
     for row in range(1, worksheet.max_row + 1):
         worksheet.row_dimensions[row].height = 18
     worksheet.row_dimensions[1].height = 25
+
+    for row in range(asset_risk_header_row + 1, sector_risk_header_row + sector_violation_count + 1):
+        worksheet.row_dimensions[row].height = 36
 
 
 def add_dashboard_charts(
@@ -428,12 +556,17 @@ if "Gain/Loss" in holdings.columns:
 else:
     holdings["Gain/Loss"] = 0
 
+current_sector = None
+for row_index, asset_name in holdings["Asset"].items():
+    if asset_name in SECTOR_LABELS:
+        current_sector = SECTOR_LABELS[asset_name]
+    elif pd.notna(asset_name) and pd.isna(holdings.at[row_index, "Sector"]):
+        holdings.at[row_index, "Sector"] = current_sector
+
 # -----------------------------
 # CLEAN DATA (safe filtering)
 # -----------------------------
-invalid_labels = [
-    "Banking", "Telecommunication", "Insurance", "Energy",
-    "ETFs", "Fixed Income", "Liquid Cash",
+invalid_labels = list(SECTOR_LABELS.keys()) + [
     "Sector Value", "Cash", "Total Portfolio Value"
 ]
 
@@ -496,9 +629,11 @@ else:
 risk_summary, asset_violations, sector_violations = build_risk_engine(
     holdings,
     sector_risk_alloc_pct,
+    total_value,
+    sector_risk_total,
 )
 
-print(f"\n--- RISK CHECK ({ASSET_WEIGHT_LIMIT}% ASSET RULE) ---")
+print("\n--- RISK CHECK (DYNAMIC ASSET RULE) ---")
 
 if asset_violations.empty:
     print("No asset concentration violations.")
