@@ -54,7 +54,14 @@ TRANSACTION_CALC_COLUMNS = [
     "Position Quantity",
 ]
 TRANSACTION_COLUMNS = TRANSACTION_BASE_COLUMNS + TRANSACTION_CALC_COLUMNS
-STATE_COLUMNS = ["Asset", "Sector", "Shares", "Current Price", "Market Value"]
+STATE_COLUMNS = [
+    "Asset",
+    "Sector",
+    "Shares",
+    "Buy Price",
+    "Current Price",
+    "Market Value",
+]
 
 ALLOWED_OPERATORS = {
     ast.Add: operator.add,
@@ -170,12 +177,20 @@ def read_previous_sheet(file_path, sheet_name, columns):
 
 
 def build_current_state(holdings):
+    if "Buy Price" not in holdings.columns:
+        holdings = holdings.copy()
+        holdings["Buy Price"] = holdings["Current Price"]
+
     state = holdings[STATE_COLUMNS].copy()
     state["Shares"] = pd.to_numeric(state["Shares"], errors="coerce").fillna(0)
     state["Current Price"] = pd.to_numeric(
         state["Current Price"],
         errors="coerce",
     ).fillna(0)
+    state["Buy Price"] = pd.to_numeric(
+        state["Buy Price"],
+        errors="coerce",
+    ).fillna(state["Current Price"])
     state["Market Value"] = pd.to_numeric(
         state["Market Value"],
         errors="coerce",
@@ -231,6 +246,39 @@ def detect_share_transactions(previous_state, current_state):
     return pd.DataFrame(transaction_rows, columns=TRANSACTION_BASE_COLUMNS)
 
 
+def build_opening_transactions(state):
+    if state.empty:
+        return pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
+
+    opening_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    transaction_rows = []
+
+    for _, row in state.iterrows():
+        shares = pd.to_numeric(row["Shares"], errors="coerce")
+        buy_price = pd.to_numeric(row.get("Buy Price"), errors="coerce")
+        current_price = pd.to_numeric(row["Current Price"], errors="coerce")
+
+        shares = 0 if pd.isna(shares) else shares
+        buy_price = current_price if pd.isna(buy_price) else buy_price
+        buy_price = 0 if pd.isna(buy_price) else buy_price
+
+        if shares <= 0:
+            continue
+
+        transaction_rows.append({
+            "Date": opening_date,
+            "Asset": row["Asset"],
+            "Action": "OPENING",
+            "Quantity": shares,
+            "Price": buy_price,
+            "Broker": "",
+            "Fees": 0,
+            "Benefits": "Opening balance",
+        })
+
+    return pd.DataFrame(transaction_rows, columns=TRANSACTION_BASE_COLUMNS)
+
+
 def calculate_transaction_metrics(transactions, current_state):
     if transactions.empty:
         return empty_transactions()
@@ -261,7 +309,7 @@ def calculate_transaction_metrics(transactions, current_state):
         average_price = cost_basis / position_quantity if position_quantity else 0
         realized_gain = 0
 
-        if action == "BUY":
+        if action in ["BUY", "OPENING"]:
             position_quantity += quantity
             cost_basis += (quantity * price) + fees
         elif action == "SELL":
@@ -657,6 +705,63 @@ def style_dashboard_sheet(
         worksheet.row_dimensions[row].height = 36
 
 
+def style_transactions_sheet(worksheet):
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_COLOR),
+        right=Side(style="thin", color=BORDER_COLOR),
+        top=Side(style="thin", color=BORDER_COLOR),
+        bottom=Side(style="thin", color=BORDER_COLOR),
+    )
+    header_fill = PatternFill("solid", fgColor=DARK_OLIVE)
+    odd_fill = PatternFill("solid", fgColor=WARM_BEIGE)
+    even_fill = PatternFill("solid", fgColor=WARM_WHITE)
+
+    worksheet.sheet_view.showGridLines = False
+    worksheet.freeze_panes = "A2"
+
+    widths = {
+        "A": 20,
+        "B": 28,
+        "C": 12,
+        "D": 14,
+        "E": 14,
+        "F": 18,
+        "G": 12,
+        "H": 20,
+        "I": 16,
+        "J": 16,
+        "K": 16,
+        "L": 22,
+        "M": 18,
+    }
+    for column, width in widths.items():
+        worksheet.column_dimensions[column].width = width
+
+    for row in range(1, worksheet.max_row + 1):
+        is_header = row == 1
+        fill = header_fill if is_header else odd_fill if row % 2 == 0 else even_fill
+        font = (
+            Font(name="Georgia", color=CREAM, bold=True)
+            if is_header
+            else Font(name="Georgia", color=TEXT_DARK)
+        )
+
+        for col in range(1, worksheet.max_column + 1):
+            cell = worksheet.cell(row=row, column=col)
+            cell.fill = fill
+            cell.font = font
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal="left" if col in [1, 2, 3, 6, 8] else "center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+    for row in range(2, worksheet.max_row + 1):
+        for col in [4, 5, 7, 9, 10, 11, 12, 13]:
+            worksheet.cell(row=row, column=col).number_format = '#,##0.00'
+
+
 def add_dashboard_charts(
     file_path,
     asset_count,
@@ -734,6 +839,12 @@ def add_dashboard_charts(
         bar_chart.set_categories(bar_categories)
         worksheet.add_chart(bar_chart, "E20")
 
+    if TRANSACTIONS_SHEET in workbook.sheetnames:
+        style_transactions_sheet(workbook[TRANSACTIONS_SHEET])
+
+    if STATE_SHEET in workbook.sheetnames:
+        workbook[STATE_SHEET].sheet_state = "hidden"
+
     workbook.save(file_path)
 
 # -----------------------------
@@ -771,7 +882,7 @@ holdings.columns = holdings.columns.astype(str).str.strip()
 # -----------------------------
 # CRITICAL FIX 1: FORCE NUMERIC CLEANING
 # -----------------------------
-for col in ["Shares", "Current Price"]:
+for col in ["Shares", "Buy Price", "Current Price"]:
     if col not in holdings.columns:
         holdings[col] = 0
 
@@ -872,6 +983,34 @@ risk_summary, asset_violations, sector_violations = build_risk_engine(
     sector_risk_total,
 )
 rebalance_plan = build_rebalance_plan(holdings, total_value, sector_risk_total)
+current_state = build_current_state(holdings)
+previous_state = read_previous_sheet(output_file, STATE_SHEET, STATE_COLUMNS)
+existing_transactions = read_previous_sheet(
+    output_file,
+    TRANSACTIONS_SHEET,
+    TRANSACTION_COLUMNS,
+)
+new_transactions = detect_share_transactions(previous_state, current_state)
+opening_state = current_state
+opening_transactions = (
+    build_opening_transactions(opening_state)
+    if existing_transactions.empty
+    else pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
+)
+preserved_transactions = (
+    pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
+    if existing_transactions.empty
+    else existing_transactions[TRANSACTION_BASE_COLUMNS]
+)
+transactions = pd.concat(
+    [
+        opening_transactions,
+        preserved_transactions,
+        new_transactions,
+    ],
+    ignore_index=True,
+)
+transactions = calculate_transaction_metrics(transactions, current_state)
 
 print("\n--- RISK CHECK (DYNAMIC ASSET RULE) ---")
 
@@ -895,6 +1034,14 @@ if rebalance_plan.empty:
     print("No trades needed.")
 else:
     print(rebalance_plan)
+
+print("\n--- TRANSACTION ENGINE ---")
+if not opening_transactions.empty:
+    print(f"Opening balances recorded: {len(opening_transactions)}")
+elif new_transactions.empty:
+    print("No new share changes detected.")
+else:
+    print(new_transactions)
 
 # -----------------------------
 # PLOTS (SAFE GUARDS FIX)
@@ -991,6 +1138,16 @@ with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
         writer,
         sheet_name="Dashboard1",
         startrow=rebalance_plan_startrow,
+        index=False,
+    )
+    transactions.to_excel(
+        writer,
+        sheet_name=TRANSACTIONS_SHEET,
+        index=False,
+    )
+    current_state.to_excel(
+        writer,
+        sheet_name=STATE_SHEET,
         index=False,
     )
 
