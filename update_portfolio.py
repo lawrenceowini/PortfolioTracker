@@ -5,19 +5,82 @@ import html
 import math
 import operator
 import re
+import tempfile
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from html.parser import HTMLParser
 import pandas as pd
 import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image, Table, TableStyle, KeepTogether
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    HAS_REPORTLAB = True
+except ImportError:
+    HAS_REPORTLAB = False
+
+try:
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.base import MIMEBase
+    from email import encoders
+    HAS_EMAIL = True
+except ImportError:
+    HAS_EMAIL = False
+
+try:
+    from dotenv import load_dotenv
+    HAS_DOTENV = True
+    DOTENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(DOTENV_PATH):
+        load_dotenv(DOTENV_PATH)
+    else:
+        print("Warning: .env file not found; using system environment variables only.")
+except ImportError:
+    HAS_DOTENV = False
+    print("Warning: python-dotenv not installed — .env file will not be loaded.")
+
+try:
+    from PyPDF2 import PdfWriter
+    HAS_PYPDF2 = True
+except ImportError:
+    HAS_PYPDF2 = False
 
 CELL_REF_RE = re.compile(r"(?<![A-Za-z0-9_])(\$?[A-Z]{1,3}\$?\d+)(?![A-Za-z0-9_])")
 SUMMARY_START_ROW = 2
 ASSET_TABLE_START_ROW = 8
+
+# PDF and Email Configuration
+if HAS_REPORTLAB:
+    PDF_PAGE_SIZE = letter
+    PDF_LEFT_MARGIN = 0.5
+    PDF_RIGHT_MARGIN = 0.5
+else:
+    PDF_PAGE_SIZE = None
+    PDF_LEFT_MARGIN = 0.5
+    PDF_RIGHT_MARGIN = 0.5
+
+PDF_TITLE_SIZE = 20
+PDF_HEADING_SIZE = 14
+PDF_TEXT_SIZE = 10
+MONTHS_TO_DISPLAY = 6
+
+EMAIL_SMTP_SERVER = os.environ.get("EMAIL_SMTP_SERVER", "smtp.gmail.com")
+EMAIL_SMTP_PORT = int(os.environ.get("EMAIL_SMTP_PORT", "587"))
+EMAIL_SMTP_USERNAME = os.environ.get("EMAIL_SMTP_USERNAME", "")
+EMAIL_SMTP_PASSWORD = os.environ.get("EMAIL_SMTP_PASSWORD", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", EMAIL_SMTP_USERNAME)
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in ("true", "1", "yes")
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False").lower() in ("true", "1", "yes")
+
 SECTOR_WEIGHT_LIMIT = 20
 SINGLE_ASSET_WEIGHT_LIMIT = 10
 SECTOR_RISK_EXCLUSIONS = {"Cash", "Fixed Income"}
@@ -1022,13 +1085,46 @@ def build_period_returns(history_df, freq, label):
 
 
 def build_performance_history(holdings, output_file, current_date, current_value):
-    history = read_previous_sheet(output_file, PERFORMANCE_HISTORY_SHEET, ["Date", "Portfolio Value"])
+    history = read_previous_sheet(output_file, PERFORMANCE_HISTORY_SHEET, ["Date", "Portfolio Value", "Largest Asset", "Largest Sector"])
     if not history.empty:
         history["Date"] = pd.to_datetime(history["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
     else:
-        history = pd.DataFrame(columns=["Date", "Portfolio Value"])
+        history = pd.DataFrame(columns=["Date", "Portfolio Value", "Largest Asset", "Largest Sector"])
 
-    latest_entry = pd.DataFrame([{"Date": current_date, "Portfolio Value": current_value}])
+    # Find largest asset and sector
+    largest_asset = "N/A"
+    largest_asset_value = 0
+    largest_sector = "N/A"
+    largest_sector_value = 0
+    
+    if not holdings.empty:
+        # Find largest asset by market value
+        asset_col = next((col for col in holdings.columns if col.lower() == "asset"), None)
+        market_col = next((col for col in holdings.columns if col.lower() == "market value"), None)
+        sector_col = next((col for col in holdings.columns if col.lower() == "sector"), None)
+        
+        if asset_col and market_col:
+            holdings_copy = holdings.copy()
+            holdings_copy[market_col] = pd.to_numeric(holdings_copy[market_col], errors="coerce")
+            max_asset_idx = holdings_copy[market_col].idxmax()
+            if pd.notna(max_asset_idx):
+                largest_asset = holdings_copy.loc[max_asset_idx, asset_col]
+                largest_asset_value = holdings_copy.loc[max_asset_idx, market_col]
+        
+        # Find largest sector by total market value
+        if sector_col and market_col:
+            sector_totals = holdings_copy.groupby(sector_col)[market_col].sum()
+            if not sector_totals.empty:
+                largest_sector_idx = sector_totals.idxmax()
+                largest_sector = largest_sector_idx
+                largest_sector_value = sector_totals.loc[largest_sector_idx]
+    
+    latest_entry = pd.DataFrame([{
+        "Date": current_date, 
+        "Portfolio Value": current_value,
+        "Largest Asset": f"{largest_asset} (KES {largest_asset_value:,.0f})",
+        "Largest Sector": f"{largest_sector} (KES {largest_sector_value:,.0f})"
+    }])
     history = pd.concat([history, latest_entry], ignore_index=True)
     history["Date"] = pd.to_datetime(history["Date"], errors="coerce")
     history = history.dropna(subset=["Date"])
@@ -1350,7 +1446,11 @@ def add_dashboard_charts(
     suggestion_count,
     performance_history_count,
 ):
-    workbook = load_workbook(file_path)
+    try:
+        workbook = load_workbook(file_path)
+    except Exception as e:
+        print(f"Warning: could not open '{file_path}' to add charts: {e}")
+        return
     worksheet = workbook["Dashboard1"]
     style_dashboard_sheet(
         worksheet,
@@ -1439,404 +1539,793 @@ def add_dashboard_charts(
 
     workbook.save(file_path)
 
-# -----------------------------
-# FILES
-# -----------------------------
-input_file = "Portfolio_Tracker_Kenya.xlsx"
-output_file = "Portfolio_Dashboard_Output.xlsx"
 
-backup_path = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-shutil.copy(input_file, backup_path)
+def add_dashboard_charts_to_workbook(
+    workbook,
+    asset_count,
+    sector_count,
+    risk_summary_count,
+    asset_violation_count,
+    sector_violation_count,
+    suggestion_count,
+    performance_history_count,
+):
+    worksheet = workbook["Dashboard1"]
+    style_dashboard_sheet(
+        worksheet,
+        asset_count,
+        sector_count,
+        risk_summary_count,
+        asset_violation_count,
+        sector_violation_count,
+        suggestion_count,
+    )
 
-print(f"Backup created: {backup_path}")
+    asset_header_row = ASSET_TABLE_START_ROW + 1
+    asset_first_row = asset_header_row + 1
+    asset_last_row = asset_header_row + asset_count
 
-# -----------------------------
-# READ RAW EXCEL
-# -----------------------------
-holdings_raw = pd.read_excel(input_file, sheet_name="Holdings", header=None)
+    sector_header_row = ASSET_TABLE_START_ROW + asset_count + 4
+    sector_first_row = sector_header_row + 1
+    sector_last_row = sector_header_row + sector_count
 
-# Find header row dynamically
-header_idx = None
+    if asset_count:
+        pie_chart = PieChart()
+        pie_chart.title = "Asset Allocation"
+        pie_chart.height = 9
+        pie_chart.width = 13
 
-for i in range(len(holdings_raw)):
-    row = holdings_raw.iloc[i].astype(str).str.lower()
-    if "asset" in row.values and "sector" in row.values:
-        header_idx = i
-        break
-
-if header_idx is None:
-    raise ValueError("Could not find header row in Holdings sheet")
-
-# Re-read properly
-holdings = pd.read_excel(input_file, sheet_name="Holdings", header=header_idx)
-holdings.columns = holdings.columns.astype(str).str.strip()
-
-# -----------------------------
-# CRITICAL FIX 1: FORCE NUMERIC CLEANING
-# -----------------------------
-for col in ["Shares", "Buy Price", "Current Price"]:
-    if col not in holdings.columns:
-        holdings[col] = 0
-
-    numeric_values = pd.to_numeric(holdings[col], errors="coerce")
-
-    if col == "Current Price":
-        formula_values = formula_backed_column_values(
-            input_file,
-            "Holdings",
-            header_idx,
-            holdings.columns.get_loc(col) + 1,
-            len(holdings),
+        pie_data = Reference(
+            worksheet,
+            min_col=3,
+            min_row=asset_header_row,
+            max_row=asset_last_row,
         )
-        holdings[col] = numeric_values.fillna(formula_values).fillna(0)
-    else:
-        holdings[col] = numeric_values.fillna(0)
+        pie_labels = Reference(
+            worksheet,
+            min_col=1,
+            min_row=asset_first_row,
+            max_row=asset_last_row,
+        )
 
-# Gain/Loss safety
-if "Gain/Loss" in holdings.columns:
-    holdings["Gain/Loss"] = pd.to_numeric(holdings["Gain/Loss"], errors="coerce").fillna(0)
-else:
-    holdings["Gain/Loss"] = 0
+        pie_chart.add_data(pie_data, titles_from_data=True)
+        pie_chart.set_categories(pie_labels)
+        worksheet.add_chart(pie_chart, "E2")
 
-current_sector = None
-for row_index, asset_name in holdings["Asset"].items():
-    if asset_name in SECTOR_LABELS:
-        current_sector = SECTOR_LABELS[asset_name]
-    elif pd.notna(asset_name) and pd.isna(holdings.at[row_index, "Sector"]):
-        holdings.at[row_index, "Sector"] = current_sector
+    if sector_count:
+        bar_chart = BarChart()
+        bar_chart.title = "Sector Allocation"
+        bar_chart.y_axis.title = "Allocation %"
+        bar_chart.x_axis.title = "Sector"
+        bar_chart.height = 9
+        bar_chart.width = 13
 
-# -----------------------------
-# CLEAN DATA (safe filtering)
-# -----------------------------
-invalid_labels = list(SECTOR_LABELS.keys()) + [
-    "Sector Value", "Cash", "Total Portfolio Value"
-]
+        bar_data = Reference(
+            worksheet,
+            min_col=2,
+            min_row=sector_header_row,
+            max_row=sector_last_row,
+        )
+        bar_categories = Reference(
+            worksheet,
+            min_col=1,
+            min_row=sector_first_row,
+            max_row=sector_last_row,
+        )
 
-holdings = holdings[holdings["Asset"].notna()]
-holdings = holdings[~holdings["Asset"].isin(invalid_labels)]
-holdings = holdings.copy()
+        bar_chart.add_data(bar_data, titles_from_data=True)
+        bar_chart.set_categories(bar_categories)
+        worksheet.add_chart(bar_chart, "E20")
 
-# -----------------------------
-# CRITICAL FIX 2: APPLY LIVE NSE PRICES BEFORE VALUE CALCULATIONS
-# -----------------------------
-print("\nFetching live NSE prices for mapped holdings...")
-holdings = inject_nse_live_prices(holdings)
+    if TRANSACTIONS_SHEET in workbook.sheetnames:
+        style_transactions_sheet(workbook[TRANSACTIONS_SHEET])
 
-holdings["Market Value"] = holdings["Shares"] * holdings["Current Price"]
+    if "NSE_Prices" in workbook.sheetnames:
+        style_nse_prices_sheet(workbook["NSE_Prices"])
 
-print("\n--- CLEAN HOLDINGS SAMPLE ---")
-print(holdings[["Asset", "Shares", "Current Price", "Market Value", "Price Source"]].head(15))
+    if DIVIDEND_OUTPUT_SHEET in workbook.sheetnames:
+        style_dividends_sheet(workbook[DIVIDEND_OUTPUT_SHEET])
 
-# -----------------------------
-# TOTAL VALUE
-# -----------------------------
-total_value = holdings["Market Value"].sum()
+    if PERFORMANCE_HISTORY_SHEET in workbook.sheetnames:
+        style_performance_history_sheet(workbook[PERFORMANCE_HISTORY_SHEET])
+        add_performance_history_chart(workbook[PERFORMANCE_HISTORY_SHEET], performance_history_count)
 
-print("\nTOTAL PORTFOLIO VALUE:", total_value)
+    if "Holdings" in workbook.sheetnames:
+        style_holdings_sheet(workbook["Holdings"])
 
-# Avoid division by zero crash
-if total_value == 0:
-    holdings["Asset Allocation %"] = 0
-else:
-    holdings["Asset Allocation %"] = (holdings["Market Value"] / total_value) * 100
+    if STATE_SHEET in workbook.sheetnames:
+        workbook[STATE_SHEET].sheet_state = "hidden"
 
-print("\n--- CLEAN ASSET ALLOCATION ---")
-print(holdings[["Asset", "Market Value", "Asset Allocation %"]])
 
-# -----------------------------
-# RETURNS: Average return per asset (percentage)
-# -----------------------------
-buy_prices = pd.to_numeric(holdings.get("Buy Price", 0), errors="coerce").fillna(0)
-current_prices = pd.to_numeric(holdings.get("Current Price", 0), errors="coerce").fillna(0)
-returns = pd.Series(0.0, index=holdings.index)
-nonzero_buy = buy_prices != 0
-returns.loc[nonzero_buy] = ((current_prices.loc[nonzero_buy] - buy_prices.loc[nonzero_buy]) / buy_prices.loc[nonzero_buy]) * 100
-holdings["Average Return %"] = returns.fillna(0)
+def generate_pdf_report(portfolio_name, performance_history, asset_violations, sector_violations, total_value, output_pdf_path, pdf_password=None):
+    """Generate a PDF report with 6-month portfolio performance and risk violations."""
+    if not HAS_REPORTLAB:
+        print(f"Warning: reportlab not installed — skipping PDF generation for {portfolio_name}")
+        return False
 
-# -----------------------------
-# SECTOR ALLOCATION
-# -----------------------------
-if "Sector" not in holdings.columns:
-    holdings["Sector"] = "Unknown"
-
-sector_alloc = holdings.groupby("Sector")["Market Value"].sum()
-
-if total_value == 0:
-    sector_alloc_pct = sector_alloc * 0
-else:
-    sector_alloc_pct = (sector_alloc / total_value) * 100
-
-print("\n--- CLEAN SECTOR ALLOCATION ---")
-print(sector_alloc_pct)
-
-# -----------------------------
-# PHASE 2 RISK ENGINE
-# -----------------------------
-sector_risk_pool = holdings[~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS)].copy()
-sector_risk_alloc = sector_risk_pool.groupby("Sector")["Market Value"].sum()
-sector_risk_total = sector_risk_alloc.sum()
-
-if sector_risk_total == 0:
-    sector_risk_alloc_pct = sector_risk_alloc * 0
-else:
-    sector_risk_alloc_pct = (sector_risk_alloc / total_value) * 100
-
-risk_summary, asset_violations, sector_violations = build_risk_engine(
-    holdings,
-    sector_risk_alloc_pct,
-    total_value,
-    sector_risk_total,
-)
-rebalance_plan = build_rebalance_plan(holdings, total_value, sector_risk_total)
-current_state = build_current_state(holdings)
-
-# Load dividend tracking data and calculate annual dividends and yield
-dividend_sheet = load_dividend_sheet(input_file)
-dividend_table, dividend_summary = build_dividend_table(holdings, dividend_sheet)
-
-current_date = datetime.now().strftime("%Y-%m-%d")
-performance_history, monthly_returns, quarterly_returns, yearly_returns = build_performance_history(
-    holdings,
-    output_file,
-    current_date,
-    total_value,
-)
-
-previous_state = read_previous_sheet(output_file, STATE_SHEET, STATE_COLUMNS)
-existing_transactions = read_previous_sheet(
-    output_file,
-    TRANSACTIONS_SHEET,
-    TRANSACTION_COLUMNS,
-)
-new_transactions = detect_share_transactions(previous_state, current_state)
-opening_state = current_state
-opening_transactions = (
-    build_opening_transactions(opening_state)
-    if existing_transactions.empty
-    else pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
-)
-preserved_transactions = (
-    pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
-    if existing_transactions.empty
-    else existing_transactions[TRANSACTION_BASE_COLUMNS]
-)
-transactions = pd.concat(
-    [
-        opening_transactions,
-        preserved_transactions,
-        new_transactions,
-    ],
-    ignore_index=True,
-)
-transactions = calculate_transaction_metrics(transactions, current_state)
-
-print("\n--- RISK CHECK (DYNAMIC ASSET RULE) ---")
-
-if asset_violations.empty:
-    print("No asset concentration violations.")
-else:
-    print(asset_violations)
-
-print(f"\n--- RISK CHECK ({SECTOR_WEIGHT_LIMIT}% SECTOR RULE) ---")
-
-if sector_violations.empty:
-    print("No sector concentration violations.")
-else:
-    print(sector_violations)
-
-print("\n--- RISK SCORE ---")
-print(risk_summary)
-
-print("\n--- HOLISTIC REBALANCE SUGGESTION ---")
-if rebalance_plan.empty:
-    print("No trades needed.")
-else:
-    print(rebalance_plan)
-
-print("\n--- TRANSACTION ENGINE ---")
-if not opening_transactions.empty:
-    print(f"Opening balances recorded: {len(opening_transactions)}")
-elif new_transactions.empty:
-    print("No new share changes detected.")
-else:
-    print(new_transactions)
-
-# -----------------------------
-# PLOTS (SAFE GUARDS FIX)
-# -----------------------------
-plt.figure()
-
-plot_data = holdings.copy()
-plot_data = plot_data.dropna(subset=["Market Value", "Asset Allocation %"])
-plot_data = plot_data[plot_data["Market Value"] > 0]
-
-if not plot_data.empty:
-    plot_data.set_index("Asset")["Asset Allocation %"].plot(kind="pie", autopct="%1.1f%%")
-else:
-    print("No valid data for pie chart.")
-
-plt.ylabel("")
-plt.show()
-
-plt.figure()
-
-if not sector_alloc_pct.dropna().empty:
-    sector_alloc_pct.plot(kind="bar")
-    plt.title("Sector Allocation")
-    plt.ylabel("Percentage")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-else:
-    print("No valid sector data to plot.")
-
-plt.show()
-
-# -----------------------------
-# DASHBOARD EXPORT (FIXED)
-# -----------------------------
-summary_df = pd.DataFrame({
-    "Metric": [
-        "Total Portfolio Value",
-        "Number of Assets",
-        "Number of Sectors"
-    ],
-    "Value": [
-        total_value,
-        len(holdings),
-        holdings["Sector"].nunique()
-    ]
-})
-
-asset_table = holdings[["Asset", "Market Value", "Asset Allocation %"]]
-sector_table = sector_alloc_pct.reset_index()
-sector_table.columns = ["Sector", "Allocation %"]
-risk_summary_startrow = ASSET_TABLE_START_ROW + len(asset_table) + len(sector_table) + 6
-asset_violations_startrow = risk_summary_startrow + len(risk_summary) + 3
-sector_violations_startrow = asset_violations_startrow + len(asset_violations) + 3
-rebalance_plan_startrow = sector_violations_startrow + len(sector_violations) + 3
-
-with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
-    summary_df.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=SUMMARY_START_ROW,
-        index=False,
-    )
-    asset_table.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=ASSET_TABLE_START_ROW,
-        index=False,
-    )
-    # Also include the full Holdings table in the output workbook
     try:
-        holdings.to_excel(
+        doc = SimpleDocTemplate(output_pdf_path, pagesize=PDF_PAGE_SIZE, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title_style = ParagraphStyle(name="CustomTitle", parent=styles["Heading1"], fontSize=PDF_TITLE_SIZE, textColor=colors.HexColor("#3B4436"), spaceAfter=0.3*inch, alignment=TA_CENTER)
+        story.append(Paragraph(f"{portfolio_name} - Portfolio Report", title_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Report Date
+        report_date = datetime.now().strftime("%B %d, %Y")
+        date_style = ParagraphStyle(name="DateStyle", parent=styles["Normal"], fontSize=PDF_TEXT_SIZE, alignment=TA_CENTER, textColor=colors.HexColor("#2F332E"))
+        story.append(Paragraph(f"Generated: {report_date}", date_style))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Portfolio Value Summary
+        heading_style = ParagraphStyle(name="CustomHeading", parent=styles["Heading2"], fontSize=PDF_HEADING_SIZE, textColor=colors.HexColor("#3B4436"), spaceAfter=0.15*inch)
+        story.append(Paragraph("Portfolio Performance (Last 6 Months)", heading_style))
+        
+        # Current Value
+        value_style = ParagraphStyle(name="ValueStyle", parent=styles["Normal"], fontSize=12, textColor=colors.HexColor("#2F332E"), spaceAfter=0.1*inch)
+        current_value_text = f"Current Total Portfolio Value: <b>KES {total_value:,.2f}</b>"
+        story.append(Paragraph(current_value_text, value_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Generate 6-month performance chart
+        if not performance_history.empty:
+            history_df = performance_history.copy()
+            history_df["Date"] = pd.to_datetime(history_df["Date"], errors="coerce")
+            six_months_ago = datetime.now() - timedelta(days=180)
+            history_df = history_df[history_df["Date"] >= six_months_ago].sort_values("Date")
+            
+            if not history_df.empty:
+                plt.figure(figsize=(8, 4))
+                plt.plot(history_df["Date"], history_df["Portfolio Value"], marker='o', color="#3B4436", linewidth=2, markersize=4)
+                plt.title("6-Month Portfolio Value Trend", fontsize=12, color="#3B4436")
+                plt.xlabel("Date", fontsize=10, color="#2F332E")
+                plt.ylabel("Portfolio Value (KES)", fontsize=10, color="#2F332E")
+                plt.grid(True, alpha=0.3)
+                plt.xticks(rotation=45, fontsize=9)
+                plt.tight_layout()
+                
+                chart_path = os.path.join(tempfile.gettempdir(), "portfolio_chart.png")
+                plt.savefig(chart_path, dpi=100, bbox_inches="tight")
+                plt.close()
+                
+                try:
+                    story.append(Image(chart_path, width=6*inch, height=3*inch))
+                except Exception as e:
+                    print(f"Warning: failed to insert chart image: {e}")
+                
+                # Add performance history table
+                story.append(Spacer(1, 0.15*inch))
+                story.append(Paragraph("Performance History Details", value_style))
+                perf_data = [["Date", "Portfolio Value", "Largest Asset", "Largest Sector"]]
+                for _, row in history_df.iterrows():
+                    perf_data.append([
+                        str(row.get("Date", "")),
+                        f"KES {row.get('Portfolio Value', 0):,.0f}",
+                        str(row.get("Largest Asset", "N/A")),
+                        str(row.get("Largest Sector", "N/A"))
+                    ])
+                
+                perf_table = Table(perf_data, colWidths=[1.2*inch, 1.5*inch, 1.5*inch, 1.3*inch])
+                perf_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3B4436")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#F1E9CB")),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FDFBF7")),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.HexColor("#B8AA91")),
+                    ("FONTSIZE", (0, 1), (-1, -1), 7),
+                ]))
+                story.append(perf_table)
+        
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Risk Violations Section
+        if not asset_violations.empty or not sector_violations.empty:
+            story.append(Paragraph("Risk Management Violations", heading_style))
+            
+            if not asset_violations.empty:
+                story.append(Paragraph("<b>Asset Concentration Violations:</b>", value_style))
+                violation_data = [["Asset", "Market Value", "Allocation %", "Limit %"]]
+                for _, row in asset_violations.iterrows():
+                    violation_data.append([
+                        str(row.get("Asset", "")),
+                        f"KES {row.get('Market Value', 0):,.2f}",
+                        f"{row.get('Allocation %', 0):.2f}%",
+                        f"{row.get('Single Asset Limit', 0):.2f}%"
+                    ])
+                
+                violation_table = Table(violation_data, colWidths=[1.5*inch, 1.5*inch, 1*inch, 1*inch])
+                violation_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3B4436")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#F1E9CB")),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 9),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FDFBF7")),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.HexColor("#B8AA91")),
+                    ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ]))
+                story.append(violation_table)
+                story.append(Spacer(1, 0.2*inch))
+            
+            if not sector_violations.empty:
+                story.append(Paragraph("<b>Sector Concentration Violations:</b>", value_style))
+                sector_data = [["Sector", "Market Value", "Allocation %", "Limit %"]]
+                for _, row in sector_violations.iterrows():
+                    sector_data.append([
+                        str(row.get("Sector", "")),
+                        f"KES {row.get('Market Value', 0):,.2f}",
+                        f"{row.get('Allocation %', 0):.2f}%",
+                        f"{row.get('Sector Limit', 0):.2f}%"
+                    ])
+                
+                sector_table = Table(sector_data, colWidths=[1.5*inch, 1.5*inch, 1*inch, 1*inch])
+                sector_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3B4436")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#F1E9CB")),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 9),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FDFBF7")),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.HexColor("#B8AA91")),
+                    ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ]))
+                story.append(sector_table)
+        else:
+            story.append(Paragraph("Risk Status: <b>No violations detected.</b>", value_style))
+        
+        doc.build(story)
+        print(f"PDF report generated: {output_pdf_path}")
+        
+        # Encrypt PDF with password if provided and PyPDF2 is available
+        if pdf_password and HAS_PYPDF2:
+            try:
+                from PyPDF2 import PdfReader
+                writer = PdfWriter()
+                with open(output_pdf_path, "rb") as input_pdf:
+                    reader = PdfReader(input_pdf)
+                    for page in reader.pages:
+                        writer.add_page(page)
+                writer.encrypt(pdf_password)
+                with open(output_pdf_path, "wb") as output_pdf:
+                    writer.write(output_pdf)
+                print(f"PDF encrypted with password protection")
+            except Exception as e:
+                print(f"Warning: failed to encrypt PDF: {e}")
+        elif pdf_password and not HAS_PYPDF2:
+            print("Warning: PyPDF2 not installed — PDF will not be password protected")
+        
+        return True
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def send_email_report(recipient_email, pdf_path, portfolio_name, pdf_password=None):
+    """Send the generated PDF report via email."""
+    if not HAS_EMAIL:
+        print("Warning: email libraries not available — skipping email send")
+        return False
+
+    if not EMAIL_SMTP_USERNAME or not EMAIL_SMTP_PASSWORD or not EMAIL_FROM:
+        print("SMTP email configuration is incomplete. Set EMAIL_SMTP_USERNAME, EMAIL_SMTP_PASSWORD, and optionally EMAIL_FROM.")
+        return False
+
+    try:
+        message = MIMEMultipart()
+        message["From"] = EMAIL_FROM
+        message["To"] = recipient_email
+        message["Subject"] = f"{portfolio_name} Portfolio Report"
+
+        body = f"Hello,\n\nPlease find attached the latest portfolio report for {portfolio_name}."
+        
+        if pdf_password:
+            body += f"\n\nIMPORTANT - PDF PASSWORD REQUIRED:\nThe PDF is password protected. To open it, enter the following password when prompted:\n\nPassword: {pdf_password}\n\nThis password is based on the first 8 characters of the portfolio filename."
+        
+        body += "\n\nRegards,\nPortfolio Tracker"
+        message.attach(MIMEText(body, "plain"))
+
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as attachment:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename={os.path.basename(pdf_path)}",
+            )
+            message.attach(part)
+        else:
+            print(f"Warning: PDF attachment not found at {pdf_path}")
+
+        if EMAIL_USE_SSL:
+            server = smtplib.SMTP_SSL(EMAIL_SMTP_SERVER, EMAIL_SMTP_PORT)
+        else:
+            server = smtplib.SMTP(EMAIL_SMTP_SERVER, EMAIL_SMTP_PORT)
+            server.ehlo()
+            if EMAIL_USE_TLS:
+                server.starttls()
+                server.ehlo()
+
+        server.login(EMAIL_SMTP_USERNAME, EMAIL_SMTP_PASSWORD)
+        server.sendmail(EMAIL_FROM, recipient_email, message.as_string())
+        server.quit()
+
+        print(f"Email sent to {recipient_email}")
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
+
+
+# -----------------------------
+# Process multiple client portfolio files
+# -----------------------------
+CLIENTS_DIR = "clients"
+REPORTS_DIR = "reports"
+
+def process_portfolio(input_file, output_file):
+    # create a backup of the input
+    backup_path = f"backup_{os.path.splitext(os.path.basename(input_file))[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    shutil.copy(input_file, backup_path)
+    print(f"Backup created: {backup_path}")
+
+    # -----------------------------
+    # READ RAW EXCEL
+    # -----------------------------
+    holdings_raw = pd.read_excel(input_file, sheet_name="Holdings", header=None)
+
+    # Find header row dynamically
+    header_idx = None
+
+    for i in range(len(holdings_raw)):
+        row = holdings_raw.iloc[i].astype(str).str.lower()
+        if "asset" in row.values and "sector" in row.values:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        raise ValueError("Could not find header row in Holdings sheet")
+
+    # Re-read properly
+    holdings = pd.read_excel(input_file, sheet_name="Holdings", header=header_idx)
+    holdings.columns = holdings.columns.astype(str).str.strip()
+
+    # -----------------------------
+    # CRITICAL FIX 1: FORCE NUMERIC CLEANING
+    # -----------------------------
+    for col in ["Shares", "Buy Price", "Current Price"]:
+        if col not in holdings.columns:
+            holdings[col] = 0
+
+        numeric_values = pd.to_numeric(holdings[col], errors="coerce")
+
+        if col == "Current Price":
+            formula_values = formula_backed_column_values(
+                input_file,
+                "Holdings",
+                header_idx,
+                holdings.columns.get_loc(col) + 1,
+                len(holdings),
+            )
+            holdings[col] = numeric_values.fillna(formula_values).fillna(0)
+        else:
+            holdings[col] = numeric_values.fillna(0)
+
+    # Gain/Loss safety
+    if "Gain/Loss" in holdings.columns:
+        holdings["Gain/Loss"] = pd.to_numeric(holdings["Gain/Loss"], errors="coerce").fillna(0)
+    else:
+        holdings["Gain/Loss"] = 0
+
+    current_sector = None
+    for row_index, asset_name in holdings["Asset"].items():
+        if asset_name in SECTOR_LABELS:
+            current_sector = SECTOR_LABELS[asset_name]
+        elif pd.notna(asset_name) and pd.isna(holdings.at[row_index, "Sector"]):
+            holdings.at[row_index, "Sector"] = current_sector
+
+    # -----------------------------
+    # CLEAN DATA (safe filtering)
+    # -----------------------------
+    invalid_labels = list(SECTOR_LABELS.keys()) + [
+        "Sector Value", "Cash", "Total Portfolio Value"
+    ]
+
+    holdings = holdings[holdings["Asset"].notna()]
+    holdings = holdings[~holdings["Asset"].isin(invalid_labels)]
+    holdings = holdings.copy()
+
+    # -----------------------------
+    # CRITICAL FIX 2: APPLY LIVE NSE PRICES BEFORE VALUE CALCULATIONS
+    # -----------------------------
+    print("\nFetching live NSE prices for mapped holdings...")
+    holdings = inject_nse_live_prices(holdings)
+
+    holdings["Market Value"] = holdings["Shares"] * holdings["Current Price"]
+
+    print("\n--- CLEAN HOLDINGS SAMPLE ---")
+    print(holdings[["Asset", "Shares", "Current Price", "Market Value", "Price Source"]].head(15))
+
+    # -----------------------------
+    # TOTAL VALUE
+    # -----------------------------
+    total_value = holdings["Market Value"].sum()
+
+    print("\nTOTAL PORTFOLIO VALUE:", total_value)
+
+    # Avoid division by zero crash
+    if total_value == 0:
+        holdings["Asset Allocation %"] = 0
+    else:
+        holdings["Asset Allocation %"] = (holdings["Market Value"] / total_value) * 100
+
+    print("\n--- CLEAN ASSET ALLOCATION ---")
+    print(holdings[["Asset", "Market Value", "Asset Allocation %"]])
+
+    # -----------------------------
+    # RETURNS: Average return per asset (percentage)
+    # -----------------------------
+    buy_prices = pd.to_numeric(holdings.get("Buy Price", 0), errors="coerce").fillna(0)
+    current_prices = pd.to_numeric(holdings.get("Current Price", 0), errors="coerce").fillna(0)
+    returns = pd.Series(0.0, index=holdings.index)
+    nonzero_buy = buy_prices != 0
+    returns.loc[nonzero_buy] = ((current_prices.loc[nonzero_buy] - buy_prices.loc[nonzero_buy]) / buy_prices.loc[nonzero_buy]) * 100
+    holdings["Average Return %"] = returns.fillna(0)
+
+    # -----------------------------
+    # SECTOR ALLOCATION
+    # -----------------------------
+    if "Sector" not in holdings.columns:
+        holdings["Sector"] = "Unknown"
+
+    sector_alloc = holdings.groupby("Sector")["Market Value"].sum()
+
+    if total_value == 0:
+        sector_alloc_pct = sector_alloc * 0
+    else:
+        sector_alloc_pct = (sector_alloc / total_value) * 100
+
+    print("\n--- CLEAN SECTOR ALLOCATION ---")
+    print(sector_alloc_pct)
+
+    # -----------------------------
+    # PHASE 2 RISK ENGINE
+    # -----------------------------
+    sector_risk_pool = holdings[~holdings["Sector"].isin(SECTOR_RISK_EXCLUSIONS)].copy()
+    sector_risk_alloc = sector_risk_pool.groupby("Sector")["Market Value"].sum()
+    sector_risk_total = sector_risk_alloc.sum()
+
+    if sector_risk_total == 0:
+        sector_risk_alloc_pct = sector_risk_alloc * 0
+    else:
+        sector_risk_alloc_pct = (sector_risk_alloc / total_value) * 100
+
+    risk_summary, asset_violations, sector_violations = build_risk_engine(
+        holdings,
+        sector_risk_alloc_pct,
+        total_value,
+        sector_risk_total,
+    )
+    rebalance_plan = build_rebalance_plan(holdings, total_value, sector_risk_total)
+    current_state = build_current_state(holdings)
+
+    # Load dividend tracking data and calculate annual dividends and yield
+    dividend_sheet = load_dividend_sheet(input_file)
+    dividend_table, dividend_summary = build_dividend_table(holdings, dividend_sheet)
+
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    performance_history, monthly_returns, quarterly_returns, yearly_returns = build_performance_history(
+        holdings,
+        output_file,
+        current_date,
+        total_value,
+    )
+
+    previous_state = read_previous_sheet(output_file, STATE_SHEET, STATE_COLUMNS)
+    existing_transactions = read_previous_sheet(
+        output_file,
+        TRANSACTIONS_SHEET,
+        TRANSACTION_COLUMNS,
+    )
+    new_transactions = detect_share_transactions(previous_state, current_state)
+    opening_state = current_state
+    opening_transactions = (
+        build_opening_transactions(opening_state)
+        if existing_transactions.empty
+        else pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
+    )
+    preserved_transactions = (
+        pd.DataFrame(columns=TRANSACTION_BASE_COLUMNS)
+        if existing_transactions.empty
+        else existing_transactions[TRANSACTION_BASE_COLUMNS]
+    )
+    transactions = pd.concat(
+        [
+            opening_transactions,
+            preserved_transactions,
+            new_transactions,
+        ],
+        ignore_index=True,
+    )
+    transactions = calculate_transaction_metrics(transactions, current_state)
+
+    print("\n--- RISK CHECK (DYNAMIC ASSET RULE) ---")
+
+    if asset_violations.empty:
+        print("No asset concentration violations.")
+    else:
+        print(asset_violations)
+
+    print(f"\n--- RISK CHECK ({SECTOR_WEIGHT_LIMIT}% SECTOR RULE) ---")
+
+    if sector_violations.empty:
+        print("No sector concentration violations.")
+    else:
+        print(sector_violations)
+
+    print("\n--- RISK SCORE ---")
+    print(risk_summary)
+
+    print("\n--- HOLISTIC REBALANCE SUGGESTION ---")
+    if rebalance_plan.empty:
+        print("No trades needed.")
+    else:
+        print(rebalance_plan)
+
+    print("\n--- TRANSACTION ENGINE ---")
+    if not opening_transactions.empty:
+        print(f"Opening balances recorded: {len(opening_transactions)}")
+    elif new_transactions.empty:
+        print("No new share changes detected.")
+    else:
+        print(new_transactions)
+
+    # -----------------------------
+    # PLOTS (SAFE GUARDS FIX)
+    # -----------------------------
+    plt.figure()
+
+    plot_data = holdings.copy()
+    plot_data = plot_data.dropna(subset=["Market Value", "Asset Allocation %"])
+    plot_data = plot_data[plot_data["Market Value"] > 0]
+
+    if not plot_data.empty:
+        plot_data.set_index("Asset")["Asset Allocation %"].plot(kind="pie", autopct="%1.1f%%")
+    else:
+        print("No valid data for pie chart.")
+
+    plt.ylabel("")
+    plt.show()
+
+    plt.figure()
+
+    if not sector_alloc_pct.dropna().empty:
+        sector_alloc_pct.plot(kind="bar")
+        plt.title("Sector Allocation")
+        plt.ylabel("Percentage")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+    else:
+        print("No valid sector data to plot.")
+
+    plt.show()
+
+    # -----------------------------
+    # DASHBOARD EXPORT (FIXED)
+    # -----------------------------
+    summary_df = pd.DataFrame({
+        "Metric": [
+            "Total Portfolio Value",
+            "Number of Assets",
+            "Number of Sectors"
+        ],
+        "Value": [
+            total_value,
+            len(holdings),
+            holdings["Sector"].nunique()
+        ]
+    })
+
+    asset_table = holdings[["Asset", "Market Value", "Asset Allocation %"]]
+    sector_table = sector_alloc_pct.reset_index()
+    sector_table.columns = ["Sector", "Allocation %"]
+    risk_summary_startrow = ASSET_TABLE_START_ROW + len(asset_table) + len(sector_table) + 6
+    asset_violations_startrow = risk_summary_startrow + len(risk_summary) + 3
+    sector_violations_startrow = asset_violations_startrow + len(sector_violations) + 3
+    rebalance_plan_startrow = sector_violations_startrow + len(sector_violations) + 3
+
+    with pd.ExcelWriter(output_file, engine="openpyxl", mode="w") as writer:
+        summary_df.to_excel(
             writer,
-            sheet_name="Holdings",
+            sheet_name="Dashboard1",
+            startrow=SUMMARY_START_ROW,
             index=False,
         )
-    except Exception:
-        # Fallback: write a minimal holdings view if full export fails
-        holdings[["Asset", "Shares", "Current Price", "Market Value"]].to_excel(
+        asset_table.to_excel(
             writer,
-            sheet_name="Holdings",
+            sheet_name="Dashboard1",
+            startrow=ASSET_TABLE_START_ROW,
+            index=False,
+        )
+        # Also include the full Holdings table in the output workbook
+        try:
+            holdings.to_excel(
+                writer,
+                sheet_name="Holdings",
+                index=False,
+            )
+        except Exception:
+            # Fallback: write a minimal holdings view if full export fails
+            holdings[["Asset", "Shares", "Current Price", "Market Value"]].to_excel(
+                writer,
+                sheet_name="Holdings",
+                index=False,
+            )
+
+        if not dividend_table.empty:
+            dividend_table.to_excel(
+                writer,
+                sheet_name=DIVIDEND_OUTPUT_SHEET,
+                index=False,
+            )
+            dividend_summary.to_excel(
+                writer,
+                sheet_name=DIVIDEND_OUTPUT_SHEET,
+                startrow=len(dividend_table) + 3,
+                index=False,
+            )
+
+        performance_history.to_excel(
+            writer,
+            sheet_name=PERFORMANCE_HISTORY_SHEET,
+            index=False,
+        )
+        monthly_returns.to_excel(
+            writer,
+            sheet_name=PERFORMANCE_HISTORY_SHEET,
+            startrow=len(performance_history) + 3,
+            index=False,
+        )
+        quarterly_returns.to_excel(
+            writer,
+            sheet_name=PERFORMANCE_HISTORY_SHEET,
+            startrow=len(performance_history) + len(monthly_returns) + 7,
+            index=False,
+        )
+        yearly_returns.to_excel(
+            writer,
+            sheet_name=PERFORMANCE_HISTORY_SHEET,
+            startrow=len(performance_history) + len(monthly_returns) + len(quarterly_returns) + 11,
             index=False,
         )
 
-    if not dividend_table.empty:
-        dividend_table.to_excel(
+        sector_table.to_excel(
             writer,
-            sheet_name=DIVIDEND_OUTPUT_SHEET,
+            sheet_name="Dashboard1",
+            startrow=ASSET_TABLE_START_ROW + len(asset_table) + 3,
             index=False,
         )
-        dividend_summary.to_excel(
+        risk_summary.to_excel(
             writer,
-            sheet_name=DIVIDEND_OUTPUT_SHEET,
-            startrow=len(dividend_table) + 3,
+            sheet_name="Dashboard1",
+            startrow=risk_summary_startrow,
+            index=False,
+        )
+        asset_violations.to_excel(
+            writer,
+            sheet_name="Dashboard1",
+            startrow=asset_violations_startrow,
+            index=False,
+        )
+        sector_violations.to_excel(
+            writer,
+            sheet_name="Dashboard1",
+            startrow=sector_violations_startrow,
+            index=False,
+        )
+        rebalance_plan.to_excel(
+            writer,
+            sheet_name="Dashboard1",
+            startrow=rebalance_plan_startrow,
+            index=False,
+        )
+        nse_price_table = build_nse_price_table(holdings)
+        nse_price_table.to_excel(
+            writer,
+            sheet_name="NSE_Prices",
+            startrow=0,
+            index=False,
+        )
+        transactions.to_excel(
+            writer,
+            sheet_name=TRANSACTIONS_SHEET,
+            index=False,
+        )
+        current_state.to_excel(
+            writer,
+            sheet_name=STATE_SHEET,
             index=False,
         )
 
-    performance_history.to_excel(
-        writer,
-        sheet_name=PERFORMANCE_HISTORY_SHEET,
-        index=False,
-    )
-    monthly_returns.to_excel(
-        writer,
-        sheet_name=PERFORMANCE_HISTORY_SHEET,
-        startrow=len(performance_history) + 3,
-        index=False,
-    )
-    quarterly_returns.to_excel(
-        writer,
-        sheet_name=PERFORMANCE_HISTORY_SHEET,
-        startrow=len(performance_history) + len(monthly_returns) + 7,
-        index=False,
-    )
-    yearly_returns.to_excel(
-        writer,
-        sheet_name=PERFORMANCE_HISTORY_SHEET,
-        startrow=len(performance_history) + len(monthly_returns) + len(quarterly_returns) + 11,
-        index=False,
-    )
+        # Insert charts/styles into the in-memory workbook before saving
+        try:
+            add_dashboard_charts_to_workbook(
+                writer.book,
+                len(asset_table),
+                len(sector_table),
+                len(risk_summary),
+                len(asset_violations),
+                len(sector_violations),
+                len(rebalance_plan),
+                len(performance_history),
+            )
+        except Exception as e:
+            print(f"Warning: failed to add in-memory charts: {e}")
 
-    sector_table.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=ASSET_TABLE_START_ROW + len(asset_table) + 3,
-        index=False,
-    )
-    risk_summary.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=risk_summary_startrow,
-        index=False,
-    )
-    asset_violations.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=asset_violations_startrow,
-        index=False,
-    )
-    sector_violations.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=sector_violations_startrow,
-        index=False,
-    )
-    rebalance_plan.to_excel(
-        writer,
-        sheet_name="Dashboard1",
-        startrow=rebalance_plan_startrow,
-        index=False,
-    )
-    nse_price_table = build_nse_price_table(holdings)
-    nse_price_table.to_excel(
-        writer,
-        sheet_name="NSE_Prices",
-        startrow=0,
-        index=False,
-    )
-    transactions.to_excel(
-        writer,
-        sheet_name=TRANSACTIONS_SHEET,
-        index=False,
-    )
-    current_state.to_excel(
-        writer,
-        sheet_name=STATE_SHEET,
-        index=False,
-    )
+    # Generate PDF report
+    portfolio_name = os.path.splitext(os.path.basename(input_file))[0]
+    pdf_path = os.path.join(REPORTS_DIR, f"{portfolio_name}_Report.pdf")
+    
+    # Extract password from first 8 characters of portfolio filename
+    pdf_password = portfolio_name[:8] if len(portfolio_name) >= 8 else portfolio_name
+    
+    generate_pdf_report(portfolio_name, performance_history, asset_violations, sector_violations, total_value, pdf_path, pdf_password)
 
-add_dashboard_charts(
-    output_file,
-    len(asset_table),
-    len(sector_table),
-    len(risk_summary),
-    len(asset_violations),
-    len(sector_violations),
-    len(rebalance_plan),
-    len(performance_history),
-)
+    # Prompt for email
+    print(f"\nDashboard Generated Successfully for {os.path.basename(input_file)} -> {os.path.basename(output_file)}")
+    
+    user_email = input(f"\nEnter email address to receive {portfolio_name} report (or press Enter to skip): ").strip()
+    if user_email:
+        if not EMAIL_SMTP_USERNAME or not EMAIL_SMTP_PASSWORD or not EMAIL_FROM:
+            print("Warning: SMTP environment variables are incomplete. Email cannot be sent until configuration is provided.")
 
-print("\nDashboard Generated Successfully.")
+        if send_email_report(user_email, pdf_path, portfolio_name, pdf_password):
+            print(f"Report sent to {user_email}")
+        else:
+            print("Email report could not be sent. Check SMTP settings and try again.")
+    else:
+        print(f"Report available at: {pdf_path}")
+        if pdf_password:
+            print(f"PDF Password: {pdf_password}")
+
+
+def _ensure_dirs():
+    if not os.path.exists(CLIENTS_DIR):
+        os.makedirs(CLIENTS_DIR)
+    if not os.path.exists(REPORTS_DIR):
+        os.makedirs(REPORTS_DIR)
+
+
+_ensure_dirs()
+
+client_files = [f for f in os.listdir(CLIENTS_DIR) if f.lower().endswith('.xlsx')]
+if not client_files:
+    print(f"No .xlsx files found in '{CLIENTS_DIR}' — please add Portfolio_Tracker_Kenya.xlsx or other portfolios.")
+else:
+    for cf in client_files:
+        input_file = os.path.join(CLIENTS_DIR, cf)
+        base = os.path.splitext(cf)[0]
+        output_file = os.path.join(REPORTS_DIR, f"{base}_Dashboard_Output.xlsx")
+        print(f"\nProcessing portfolio: {input_file}")
+        # remove any previous corrupted output to ensure a fresh write
+        try:
+            if os.path.exists(output_file):
+                os.remove(output_file)
+        except Exception:
+            pass
+
+        try:
+            process_portfolio(input_file, output_file)
+        except Exception as e:
+            import traceback
+            print(f"Error processing {input_file}: {e}")
+            traceback.print_exc()
