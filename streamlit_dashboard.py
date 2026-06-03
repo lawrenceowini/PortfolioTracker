@@ -55,6 +55,18 @@ try:
 except ImportError:
     HAS_CORP_ACTIONS = False
 
+try:
+    import tax_reporting as _tax
+    HAS_TAX = True
+except ImportError:
+    HAS_TAX = False
+
+try:
+    import alerts as _alerts
+    HAS_ALERTS = True
+except ImportError:
+    HAS_ALERTS = False
+
 # ─── Page config ───────────────────────────────────────────────────────────────
 # Load icon for page tab (must be done before set_page_config)
 import base64 as _b64_early
@@ -501,7 +513,45 @@ with st.sidebar:
         )
 
     # ── Data source ────────────────────────────────────────────────────────────
-    st.markdown("DATA SOURCE")
+    st.markdown(
+        '<p style="color:#F1E9CB;font-size:0.7rem;font-weight:700;letter-spacing:0.1em;'
+        'text-transform:uppercase;margin-bottom:0.4rem;">DATA SOURCE</p>',
+        unsafe_allow_html=True,
+    )
+    # Style the radio so its labels are readable on the dark sidebar
+    st.markdown(
+        '<style>'
+        'section[data-testid="stSidebar"] .stRadio label span {'
+        '  color: rgba(241,233,203,0.90) !important;'
+        '  font-size: 0.85rem !important;'
+        '}'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] label,'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] p,'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] div,'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] small {'
+        '  color: rgba(241,233,203,0.90) !important;'
+        '  font-size: 0.82rem !important;'
+        '}'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {'
+        '  background: rgba(241,233,203,0.08) !important;'
+        '  border: 1px dashed rgba(241,233,203,0.35) !important;'
+        '  border-radius: 8px !important;'
+        '}'
+        'section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {'
+        '  background: rgba(241,233,203,0.15) !important;'
+        '  color: #F1E9CB !important;'
+        '  border: 1px solid rgba(241,233,203,0.3) !important;'
+        '}'
+        'section[data-testid="stSidebar"] .stSelectbox label,'
+        'section[data-testid="stSidebar"] .stSelectbox span {'
+        '  color: rgba(241,233,203,0.90) !important;'
+        '  font-size: 0.82rem !important;'
+        '}'
+        '</style>',
+        unsafe_allow_html=True,
+    )
+
     source_mode = st.radio(
         "Load data from:",
         ["Upload Excel file", "Auto-read from reports/ folder"],
@@ -518,8 +568,39 @@ with st.sidebar:
             label_visibility="collapsed",
         )
         if uploaded:
-            sheets = load_workbook_sheets(uploaded)
-            st.markdown(f'<span class="badge-ok">✓ {uploaded.name}</span>', unsafe_allow_html=True)
+            # ── Save uploaded file to reports/ so it appears on Reports page ──
+            _reports_dir = "reports"
+            os.makedirs(_reports_dir, exist_ok=True)
+
+            # Derive output filename: strip _Dashboard_Output suffix if present,
+            # otherwise use the uploaded name as-is
+            _base = uploaded.name.replace("_Dashboard_Output.xlsx", "").replace(".xlsx", "")
+            _out_name = f"{_base}_Dashboard_Output.xlsx"
+            _out_path = os.path.join(_reports_dir, _out_name)
+
+            # Write file to reports/ folder (overwrite if exists)
+            with open(_out_path, "wb") as _fout:
+                _fout.write(uploaded.getvalue())
+
+            sheets = load_workbook_sheets(_out_path, is_path=True)
+            st.markdown(
+                f'<span class="badge-ok">✓ {uploaded.name} — saved to reports/</span>',
+                unsafe_allow_html=True,
+            )
+
+            # Show a note if a matching PDF exists
+            _pdf_name = f"{_base}_Report.pdf"
+            _pdf_path = os.path.join(_reports_dir, _pdf_name)
+            if os.path.exists(_pdf_path):
+                st.markdown(
+                    f'<span class="badge-ok">📄 PDF report available</span>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<span class="badge-warn">⚠️ No PDF yet — run update_portfolio.py to generate one</span>',
+                    unsafe_allow_html=True,
+                )
 
     else:
         reports_dir = "reports"
@@ -564,6 +645,8 @@ with st.sidebar:
             "🔄 Transactions",
         ]),
         ("SYSTEM", [
+            "🔔 Alerts",
+            "🧾 Tax Reporting",
             "📧 Reports & Email",
         ]),
     ]
@@ -2968,6 +3051,699 @@ elif page == "📧 Reports & Email":
                 st.error(f"SMTP error: {e}")
             except Exception as e:
                 st.error(f"Could not send email: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: TAX REPORTING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "🧾 Tax Reporting":
+    import datetime as _dt_tax
+
+    st.markdown('<div class="main-header">Tax Reporting</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Capital Gains Tax, Withholding Tax on dividends and Securities Transaction Levy — Kenyan tax law</p>', unsafe_allow_html=True)
+
+    if not HAS_TAX:
+        st.error("tax_reporting.py not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    # Disclaimer
+    st.warning(_tax.DISCLAIMER)
+
+    tx_df  = sheets.get("tx",        pd.DataFrame())
+    div_df = sheets.get("dividends", pd.DataFrame())
+
+    # ── Tax year selector ──────────────────────────────────────────────────────
+    current_year = _dt_tax.datetime.now().year
+    available_years = list(range(current_year, current_year - 6, -1))
+
+    ty_col, _ = st.columns([1, 3])
+    with ty_col:
+        selected_year = st.selectbox(
+            "Tax Year",
+            available_years,
+            index=0,
+            key="tax_year_select",
+        )
+
+    # ── Annual summary KPIs ────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Annual Tax Obligation Summary</div>', unsafe_allow_html=True)
+
+    if not tx_df.empty:
+        cgt_annual = _tax.compute_cgt_by_year(tx_df)
+        cgt_row    = cgt_annual[cgt_annual["Tax Year"] == selected_year] if not cgt_annual.empty else pd.DataFrame()
+        cgt_due    = float(cgt_row.iloc[0]["CGT Due (KES)"])    if not cgt_row.empty else 0.0
+        net_gain   = float(cgt_row.iloc[0]["Net Gain (KES)"])   if not cgt_row.empty else 0.0
+        tot_gains  = float(cgt_row.iloc[0]["Total Gains (KES)"]) if not cgt_row.empty else 0.0
+        tot_losses = float(cgt_row.iloc[0]["Total Losses (KES)"]) if not cgt_row.empty else 0.0
+    else:
+        cgt_due = net_gain = tot_gains = tot_losses = 0.0
+
+    wht_annual = _tax.compute_wht_by_year(div_df) if not div_df.empty else pd.DataFrame()
+    wht_row    = wht_annual[wht_annual["Tax Year"] == selected_year] if not wht_annual.empty else pd.DataFrame()
+    wht_due    = float(wht_row.iloc[0]["WHT Due (KES)"])         if not wht_row.empty else 0.0
+    gross_div  = float(wht_row.iloc[0]["Gross Dividends (KES)"]) if not wht_row.empty else 0.0
+
+    stl_df  = _tax.compute_stl(tx_df, selected_year) if not tx_df.empty else pd.DataFrame()
+    stl_due = float(stl_df.iloc[0]["STL Paid (KES)"]) if not stl_df.empty else 0.0
+
+    total_tax = cgt_due + wht_due + stl_due
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        cgt_colour = "#dc2626" if cgt_due > 0 else "#16a34a"
+        st.markdown(
+            f'''<div class="kpi-card">
+            <div class="kpi-label">Capital Gains Tax</div>
+            <div class="kpi-value" style="color:{cgt_colour};">KES {cgt_due:,.2f}</div>
+            <div class="kpi-sub">15% of net realised gains</div>
+            </div>''', unsafe_allow_html=True,
+        )
+    with k2:
+        st.markdown(kpi_card("WHT on Dividends", f"KES {wht_due:,.2f}", "5% deducted at source"), unsafe_allow_html=True)
+    with k3:
+        st.markdown(kpi_card("Securities Levy (STL)", f"KES {stl_due:,.2f}", "0.12% on buy transactions"), unsafe_allow_html=True)
+    with k4:
+        tax_colour = "#dc2626" if total_tax > 0 else "#16a34a"
+        st.markdown(
+            f'''<div class="kpi-card">
+            <div class="kpi-label">Total Tax {selected_year}</div>
+            <div class="kpi-value" style="color:{tax_colour};">KES {total_tax:,.2f}</div>
+            <div class="kpi-sub">CGT + WHT + STL</div>
+            </div>''', unsafe_allow_html=True,
+        )
+    st.markdown("")
+
+    # ── Tabs ───────────────────────────────────────────────────────────────────
+    tab_cgt, tab_wht, tab_hold, tab_hist, tab_cal = st.tabs([
+        "📈 Capital Gains Tax",
+        "💸 Dividend WHT",
+        "⏱️ Holding Periods",
+        "📅 Multi-Year History",
+        "🗓️ Tax Calendar",
+    ])
+
+    # ── TAB 1: CGT ────────────────────────────────────────────────────────────
+    with tab_cgt:
+        st.markdown('<div class="section-title">Capital Gains Tax Detail</div>', unsafe_allow_html=True)
+
+        if tx_df.empty:
+            st.info("No transaction data found.")
+        else:
+            # Gains vs losses KPIs
+            g1, g2, g3 = st.columns(3)
+            with g1:
+                st.markdown(kpi_card("Total Gains", f"KES {tot_gains:,.2f}", "From profitable sells"), unsafe_allow_html=True)
+            with g2:
+                loss_colour = "#16a34a" if tot_losses == 0 else "#dc2626"
+                st.markdown(
+                    f'''<div class="kpi-card">
+                    <div class="kpi-label">Total Losses</div>
+                    <div class="kpi-value" style="color:{loss_colour};">KES {tot_losses:,.2f}</div>
+                    <div class="kpi-sub">From loss-making sells (offsets gains)</div>
+                    </div>''', unsafe_allow_html=True,
+                )
+            with g3:
+                ng_colour = "#16a34a" if net_gain == 0 else "#dc2626"
+                st.markdown(
+                    f'''<div class="kpi-card">
+                    <div class="kpi-label">Net Taxable Gain</div>
+                    <div class="kpi-value" style="color:{ng_colour};">KES {net_gain:,.2f}</div>
+                    <div class="kpi-sub">Gains minus losses</div>
+                    </div>''', unsafe_allow_html=True,
+                )
+            st.markdown("")
+
+            # Per-transaction CGT table
+            cgt_asset = _tax.compute_cgt_by_asset(tx_df, selected_year)
+            if not cgt_asset.empty:
+                st.markdown('<div class="section-title">Per-Transaction Breakdown</div>', unsafe_allow_html=True)
+
+                def colour_cgt(row):
+                    status = str(row.get("Status", ""))
+                    if status == "Gain": return [""] * 3 + ["background:#f0fdf4;color:#166534;font-weight:600"] + ["background:#fee2e2;color:#991b1b;font-weight:600"] + [""] * 3
+                    if status == "Loss": return [""] * 3 + ["background:#fee2e2;color:#991b1b;font-weight:600"] + ["background:#f0fdf4;color:#166534;font-weight:600"] + [""] * 3
+                    return [""] * len(row)
+
+                display_cgt = cgt_asset.copy()
+                for col in ["Sale Price (KES)", "Gross Proceeds", "Realised Gain/Loss", "CGT Due (KES)"]:
+                    if col in display_cgt.columns:
+                        display_cgt[col] = pd.to_numeric(display_cgt[col], errors="coerce").map(
+                            lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                        )
+                st.dataframe(display_cgt, use_container_width=True, hide_index=True)
+
+                # Gains vs losses waterfall
+                raw_cgt = _tax.compute_cgt_by_asset(tx_df, selected_year)
+                if not raw_cgt.empty and "Realised Gain/Loss" in raw_cgt.columns:
+                    raw_cgt["Realised Gain/Loss"] = pd.to_numeric(raw_cgt["Realised Gain/Loss"], errors="coerce").fillna(0)
+                    colours_cgt = ["#16a34a" if v >= 0 else "#dc2626" for v in raw_cgt["Realised Gain/Loss"]]
+                    fig_cgt = go.Figure(go.Bar(
+                        x=raw_cgt["Asset"],
+                        y=raw_cgt["Realised Gain/Loss"],
+                        marker_color=colours_cgt,
+                        text=raw_cgt["Realised Gain/Loss"].map(lambda x: f"KES {x:,.0f}"),
+                        textposition="outside",
+                    ))
+                    fig_cgt.add_hline(y=0, line_dash="solid", line_color=BORDER_COLOR, line_width=1)
+                    fig_cgt.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font_color=TEXT_DARK,
+                        title=f"Realised Gain / Loss by Asset — {selected_year}",
+                        title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                        xaxis_title="Asset", yaxis_title="KES",
+                        margin=dict(t=70, b=60, l=20, r=20),
+                    )
+                    st.plotly_chart(fig_cgt, use_container_width=True)
+            else:
+                st.markdown(
+                    f'<div class="alert-card-ok">✓ No sell transactions in {selected_year} — no CGT due for this year.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # CGT explanation
+            with st.expander("📖 How CGT works for NSE investors in Kenya"):
+                st.markdown(f"""
+**Capital Gains Tax on NSE Securities (Finance Act 2023)**
+
+- **Rate:** {_tax.CGT_RATE_NSE*100:.0f}% on net realised gains
+- **Trigger:** Selling listed securities on the NSE
+- **Netting:** Losses from one security can offset gains from another **in the same tax year**
+- **Loss carry-forward:** Net losses on NSE securities **cannot** be carried forward to future years
+- **Filing:** Reported on your annual KRA iTax return
+- **Payment:** Due by 30 June following the end of the tax year
+
+**What counts as a gain?**
+Sale proceeds minus your cost basis (average purchase price × shares sold, plus any fees allocated to the position).
+
+**What is exempt?**
+Gains on government securities (Treasury Bills, Treasury Bonds) are exempt from CGT.
+                """)
+
+    # ── TAB 2: Dividend WHT ───────────────────────────────────────────────────
+    with tab_wht:
+        st.markdown('<div class="section-title">Withholding Tax on Dividends</div>', unsafe_allow_html=True)
+
+        if div_df.empty:
+            st.info("No dividend data found. Ensure your input Excel has a 'Dividend Tracking' sheet.")
+        else:
+            w1, w2, w3 = st.columns(3)
+            with w1:
+                st.markdown(kpi_card("Gross Dividends", f"KES {gross_div:,.2f}", f"Tax year {selected_year}"), unsafe_allow_html=True)
+            with w2:
+                st.markdown(kpi_card("WHT Deducted", f"KES {wht_due:,.2f}", "5% — final tax"), unsafe_allow_html=True)
+            with w3:
+                net_div = gross_div - wht_due
+                st.markdown(kpi_card("Net Received", f"KES {net_div:,.2f}", "After WHT"), unsafe_allow_html=True)
+            st.markdown("")
+
+            # Per-asset WHT
+            wht_asset = _tax.compute_wht_by_asset(div_df)
+            if not wht_asset.empty:
+                st.markdown('<div class="section-title">Per-Asset Dividend WHT</div>', unsafe_allow_html=True)
+                display_wht = wht_asset.copy()
+                for col in ["Gross Dividend (KES)", "WHT (5%) (KES)", "Net Dividend (KES)"]:
+                    if col in display_wht.columns:
+                        display_wht[col] = pd.to_numeric(display_wht[col], errors="coerce").map(
+                            lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                        )
+                if "Dividend Yield %" in display_wht.columns:
+                    display_wht["Dividend Yield %"] = pd.to_numeric(
+                        display_wht["Dividend Yield %"], errors="coerce"
+                    ).map(lambda x: f"{x:.2f}%" if pd.notna(x) else "")
+                st.dataframe(display_wht, use_container_width=True, hide_index=True)
+
+                # Gross vs net dividend bar chart
+                raw_wht = _tax.compute_wht_by_asset(div_df)
+                if not raw_wht.empty:
+                    fig_wht = go.Figure()
+                    fig_wht.add_trace(go.Bar(
+                        name="Net Dividend", x=raw_wht["Asset"],
+                        y=pd.to_numeric(raw_wht["Net Dividend (KES)"], errors="coerce"),
+                        marker_color=DARK_OLIVE,
+                    ))
+                    fig_wht.add_trace(go.Bar(
+                        name="WHT (5%)", x=raw_wht["Asset"],
+                        y=pd.to_numeric(raw_wht["WHT (5%) (KES)"], errors="coerce"),
+                        marker_color="#f59e0b",
+                    ))
+                    fig_wht.update_layout(
+                        barmode="stack",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font_color=TEXT_DARK,
+                        title="Gross Dividend Split: Net Received vs WHT",
+                        title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                        xaxis_title="Asset", yaxis_title="KES",
+                        margin=dict(t=70, b=60, l=20, r=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    )
+                    st.plotly_chart(fig_wht, use_container_width=True)
+
+            with st.expander("📖 How WHT on dividends works"):
+                st.markdown(f"""
+**Withholding Tax on Dividends**
+
+- **Rate:** {_tax.WHT_DIVIDEND_RESIDENT*100:.0f}% for resident individuals on dividends from listed companies
+- **Mechanism:** Deducted at source by the company before the dividend reaches you
+- **Final tax:** WHT is a final tax — you do not declare dividends as income on your personal tax return
+- **No refund:** If your marginal rate is lower than 5%, the WHT is not refundable
+- **Automatic:** No action required from you — the company handles it
+                """)
+
+    # ── TAB 3: Holding Periods ────────────────────────────────────────────────
+    with tab_hold:
+        st.markdown('<div class="section-title">Holding Period Analysis</div>', unsafe_allow_html=True)
+        st.caption("Tracks how long each position has been held. Useful for tax planning — knowing which positions are approaching the 1-year mark can inform sell decisions.")
+
+        if tx_df.empty:
+            st.info("No transaction data found.")
+        else:
+            hold_df = _tax.compute_holding_periods(tx_df)
+            if hold_df.empty:
+                st.info("No open positions found.")
+            else:
+                # Summary
+                long_term  = hold_df[hold_df["Holding Status"].str.contains("Long")]
+                short_term = hold_df[hold_df["Holding Status"].str.contains("Short")]
+                h1, h2, h3 = st.columns(3)
+                with h1:
+                    st.markdown(kpi_card("Open Positions", str(len(hold_df)), "with holding data"), unsafe_allow_html=True)
+                with h2:
+                    st.markdown(kpi_card("Long-term (>1yr)", str(len(long_term)), "held over 1 year"), unsafe_allow_html=True)
+                with h3:
+                    st.markdown(kpi_card("Short-term (<1yr)", str(len(short_term)), "held under 1 year"), unsafe_allow_html=True)
+                st.markdown("")
+
+                # Colour code by holding status
+                def colour_hold(row):
+                    if "Long" in str(row.get("Holding Status", "")):
+                        return ["background:#f0fdf4;color:#166534"] * len(row)
+                    return ["background:#fef9c3;color:#854d0e"] * len(row)
+
+                st.dataframe(
+                    hold_df.style.apply(colour_hold, axis=1),
+                    use_container_width=True, hide_index=True,
+                )
+
+                # Days held bar chart
+                fig_hold = go.Figure(go.Bar(
+                    y=hold_df["Asset"],
+                    x=hold_df["Days Held"],
+                    orientation="h",
+                    marker_color=[DARK_OLIVE if "Long" in s else "#f59e0b" for s in hold_df["Holding Status"]],
+                    text=hold_df["Days Held"].map(lambda x: f"{x} days"),
+                    textposition="outside",
+                ))
+                fig_hold.add_vline(
+                    x=365, line_dash="dash", line_color="#16a34a", line_width=2,
+                    annotation_text="1 year", annotation_position="top",
+                )
+                fig_hold.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color=TEXT_DARK,
+                    title="Days Held per Position (green line = 1 year)",
+                    title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                    xaxis_title="Days Held",
+                    margin=dict(t=70, b=40, l=130, r=80),
+                    height=max(220, len(hold_df) * 34),
+                )
+                st.plotly_chart(fig_hold, use_container_width=True)
+
+    # ── TAB 4: Multi-Year History ─────────────────────────────────────────────
+    with tab_hist:
+        st.markdown('<div class="section-title">Multi-Year Tax History</div>', unsafe_allow_html=True)
+
+        if tx_df.empty:
+            st.info("No transaction data found.")
+        else:
+            cgt_all = _tax.compute_cgt_by_year(tx_df)
+            wht_all = _tax.compute_wht_by_year(div_df) if not div_df.empty else pd.DataFrame()
+
+            if not cgt_all.empty:
+                st.markdown("**Capital Gains Tax by Year**")
+                display_cgt_all = cgt_all.copy()
+                for col in ["Total Gains (KES)", "Total Losses (KES)", "Net Gain (KES)", "CGT Due (KES)"]:
+                    if col in display_cgt_all.columns:
+                        display_cgt_all[col] = pd.to_numeric(display_cgt_all[col], errors="coerce").map(
+                            lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                        )
+                st.dataframe(display_cgt_all.drop(columns=["Net Loss Carried Fwd"], errors="ignore"),
+                             use_container_width=True, hide_index=True)
+
+                # CGT trend chart
+                fig_trend = go.Figure()
+                fig_trend.add_trace(go.Bar(
+                    x=cgt_all["Tax Year"].astype(str),
+                    y=cgt_all["CGT Due (KES)"],
+                    name="CGT Due",
+                    marker_color=DARK_OLIVE,
+                    text=cgt_all["CGT Due (KES)"].map(lambda x: f"KES {x:,.0f}"),
+                    textposition="outside",
+                ))
+                fig_trend.add_trace(go.Bar(
+                    x=cgt_all["Tax Year"].astype(str),
+                    y=cgt_all["Net Gain (KES)"],
+                    name="Net Taxable Gain",
+                    marker_color=ACCENT,
+                    opacity=0.6,
+                ))
+                fig_trend.update_layout(
+                    barmode="overlay",
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color=TEXT_DARK,
+                    title="CGT Trend Over Years",
+                    title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                    xaxis_title="Tax Year", yaxis_title="KES",
+                    margin=dict(t=70, b=40, l=20, r=20),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+
+            if not wht_all.empty:
+                st.markdown("**Withholding Tax on Dividends by Year**")
+                display_wht_all = wht_all.copy()
+                for col in ["Gross Dividends (KES)", "WHT Due (KES)", "Net Received"]:
+                    if col in display_wht_all.columns:
+                        display_wht_all[col] = pd.to_numeric(display_wht_all[col], errors="coerce").map(
+                            lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                        )
+                st.dataframe(display_wht_all, use_container_width=True, hide_index=True)
+
+    # ── TAB 5: Tax Calendar ───────────────────────────────────────────────────
+    with tab_cal:
+        st.markdown('<div class="section-title">Kenyan Tax Calendar for Securities Investors</div>', unsafe_allow_html=True)
+
+        cal_df = _tax.build_tax_calendar(selected_year)
+        st.dataframe(cal_df, use_container_width=True, hide_index=True)
+
+        st.markdown("")
+        st.markdown('<div class="section-title">Annual Tax Summary — Printable</div>', unsafe_allow_html=True)
+
+        if not tx_df.empty:
+            summary_df = _tax.build_annual_tax_summary(tx_df, div_df, selected_year)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+            # Download as CSV
+            csv_data = summary_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label=f"⬇️ Download {selected_year} Tax Summary (CSV)",
+                data=csv_data,
+                file_name=f"tax_summary_{selected_year}.csv",
+                mime="text/csv",
+            )
+
+        st.markdown("")
+        st.markdown('<div class="section-title">KRA Resources</div>', unsafe_allow_html=True)
+        st.markdown("""
+- **KRA iTax Portal:** [itax.kra.go.ke](https://itax.kra.go.ke) — file your annual return here
+- **KRA Helpline:** 0800 720 469 (toll-free)
+- **CGT Guide:** Search "Capital Gains Tax" on [kra.go.ke](https://www.kra.go.ke)
+- **Finance Act 2023:** Introduced CGT on listed securities at 15%
+        """)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: ALERTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "🔔 Alerts":
+    st.markdown('<div class="main-header">Alerts</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Real-time portfolio monitoring — price movements, concentration breaches, drawdowns and more</p>', unsafe_allow_html=True)
+
+    if not HAS_ALERTS:
+        st.error("alerts.py not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    holdings_df = sheets.get("holdings", pd.DataFrame())
+    div_df      = sheets.get("dividends", pd.DataFrame())
+    hist_df     = sheets.get("history",   pd.DataFrame())
+
+    # Extract portfolio history
+    port_history = pd.DataFrame()
+    if not hist_df.empty:
+        for i, row in hist_df.iterrows():
+            vals = [str(v).strip() for v in row.values if pd.notna(v) and str(v).strip() not in ("","nan")]
+            if "Portfolio Value" in vals and "Date" in vals:
+                sub = hist_df.iloc[i:].copy()
+                sub.columns = sub.iloc[0]
+                sub = sub[1:].dropna(how="all").reset_index(drop=True)
+                sub["Date"]            = pd.to_datetime(sub["Date"], errors="coerce")
+                sub["Portfolio Value"] = pd.to_numeric(sub["Portfolio Value"], errors="coerce")
+                port_history = sub.dropna(subset=["Date","Portfolio Value"]).sort_values("Date")
+                break
+
+    cfg = _alerts.load_alerts_config()
+
+    # ── Run all checks ─────────────────────────────────────────────────────────
+    if st.button("🔄 Run Alert Checks Now", type="primary"):
+        st.session_state.alert_results = _alerts.run_all_checks(
+            holdings_df, div_df, port_history, cfg
+        )
+        st.rerun()
+
+    # Auto-run on page load if no results yet
+    if "alert_results" not in st.session_state:
+        st.session_state.alert_results = _alerts.run_all_checks(
+            holdings_df, div_df, port_history, cfg
+        )
+
+    active_alerts = st.session_state.alert_results
+    counts        = _alerts.count_by_severity(active_alerts)
+
+    # ── Summary KPI row ────────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Alert Summary</div>', unsafe_allow_html=True)
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        total_colour = "#dc2626" if counts["CRITICAL"] > 0 else "#16a34a"
+        st.markdown(
+            f'''<div class="kpi-card">
+            <div class="kpi-label">Total Active</div>
+            <div class="kpi-value" style="color:{total_colour};">{len(active_alerts)}</div>
+            <div class="kpi-sub">across all categories</div>
+            </div>''', unsafe_allow_html=True,
+        )
+    with k2:
+        cr_colour = "#dc2626" if counts["CRITICAL"] > 0 else TEXT_DARK
+        st.markdown(
+            f'''<div class="kpi-card">
+            <div class="kpi-label">🚨 Critical</div>
+            <div class="kpi-value" style="color:{cr_colour};">{counts["CRITICAL"]}</div>
+            <div class="kpi-sub">immediate attention needed</div>
+            </div>''', unsafe_allow_html=True,
+        )
+    with k3:
+        w_colour = "#d97706" if counts["WARNING"] > 0 else TEXT_DARK
+        st.markdown(
+            f'''<div class="kpi-card">
+            <div class="kpi-label">⚠️ Warning</div>
+            <div class="kpi-value" style="color:{w_colour};">{counts["WARNING"]}</div>
+            <div class="kpi-sub">monitor closely</div>
+            </div>''', unsafe_allow_html=True,
+        )
+    with k4:
+        st.markdown(kpi_card("ℹ️ Info", str(counts["INFO"]), "informational only"), unsafe_allow_html=True)
+    st.markdown("")
+
+    # ── Active alert banners ───────────────────────────────────────────────────
+    tab_active, tab_config, tab_price, tab_log = st.tabs([
+        "🚨 Active Alerts",
+        "⚙️ Alert Settings",
+        "📌 Price Alert Setup",
+        "📋 Alert History",
+    ])
+
+    with tab_active:
+        if not active_alerts:
+            st.markdown(
+                '<div class="alert-card-ok" style="padding:1.2rem;">'
+                '✅ <strong>All clear — no alerts triggered.</strong> Your portfolio is within all configured thresholds.' +
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            # Group by severity
+            for severity in ["CRITICAL", "WARNING", "INFO"]:
+                group = [a for a in active_alerts if a.get("severity") == severity]
+                if not group:
+                    continue
+                icon, colour, bg = _alerts.SEVERITY[severity]
+                st.markdown(f"**{icon} {severity} ({len(group)})**")
+                for alert in group:
+                    card_cls = {
+                        "CRITICAL": "alert-card-bad",
+                        "WARNING" : "alert-card",
+                        "INFO"    : "alert-card-ok",
+                    }.get(severity, "alert-card")
+                    st.markdown(
+                        f'<div class="{card_cls}">'
+                        f'<strong>{alert.get("asset","")}</strong> · {alert.get("type","")} · '
+                        f'{alert.get("message","")}' +
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("")
+
+            # Send critical by email
+            if counts["CRITICAL"] > 0 and "smtp_config" in st.session_state:
+                smtp = st.session_state.smtp_config
+                if smtp.get("username"):
+                    st.markdown('<div class="section-title">Email Critical Alerts</div>', unsafe_allow_html=True)
+                    email_rec = st.text_input("Send critical alerts to:", placeholder="you@example.com", key="alert_email_rec")
+                    if st.button("📤 Send Alert Email", key="send_alert_btn"):
+                        success, msg = _alerts.send_alert_email(active_alerts, smtp, email_rec)
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(f"Could not send: {msg}")
+
+    with tab_config:
+        st.markdown('<div class="section-title">Concentration Limits</div>', unsafe_allow_html=True)
+        conc_cfg = cfg.get("concentration", {})
+        c1, c2, c3 = st.columns([1,1,1])
+        with c1:
+            new_asset_lim  = st.number_input("Asset limit (%)", min_value=1.0, max_value=50.0,
+                                              value=float(conc_cfg.get("asset_limit",  10.0)), step=0.5, key="al_conc_asset")
+        with c2:
+            new_sector_lim = st.number_input("Sector limit (%)", min_value=1.0, max_value=100.0,
+                                              value=float(conc_cfg.get("sector_limit", 20.0)), step=0.5, key="al_conc_sector")
+        with c3:
+            conc_enabled   = st.checkbox("Enable", value=bool(conc_cfg.get("enabled", True)), key="al_conc_en")
+
+        st.markdown('<div class="section-title">Drawdown Thresholds</div>', unsafe_allow_html=True)
+        dd_cfg = cfg.get("drawdown", {})
+        d1, d2, d3 = st.columns([1,1,1])
+        with d1:
+            new_dd_warn = st.number_input("Warning drawdown (%)", min_value=1.0, max_value=50.0,
+                                           value=float(dd_cfg.get("warning_pct",  10.0)), step=1.0, key="al_dd_warn")
+        with d2:
+            new_dd_crit = st.number_input("Critical drawdown (%)", min_value=1.0, max_value=80.0,
+                                           value=float(dd_cfg.get("critical_pct", 20.0)), step=1.0, key="al_dd_crit")
+        with d3:
+            dd_enabled  = st.checkbox("Enable", value=bool(dd_cfg.get("enabled", True)), key="al_dd_en")
+
+        st.markdown('<div class="section-title">Dividend Yield Alert</div>', unsafe_allow_html=True)
+        dy_cfg = cfg.get("dividend_yield", {})
+        y1, y2 = st.columns([1,3])
+        with y1:
+            new_min_yield = st.number_input("Min portfolio yield (%)", min_value=0.0, max_value=20.0,
+                                             value=float(dy_cfg.get("min_yield", 2.0)), step=0.25, key="al_dy")
+        with y2:
+            dy_enabled    = st.checkbox("Enable dividend yield alert", value=bool(dy_cfg.get("enabled", False)), key="al_dy_en")
+
+        email_crit = st.checkbox(
+            "Send email when critical alerts are triggered (requires SMTP configured on Reports page)",
+            value=bool(cfg.get("email_on_critical", False)), key="al_email",
+        )
+
+        if st.button("💾 Save Alert Settings", type="primary", key="save_alerts_cfg"):
+            cfg["concentration"]     = {"asset_limit": new_asset_lim, "sector_limit": new_sector_lim, "enabled": conc_enabled}
+            cfg["drawdown"]          = {"warning_pct": new_dd_warn,   "critical_pct": new_dd_crit,   "enabled": dd_enabled}
+            cfg["dividend_yield"]    = {"min_yield": new_min_yield, "enabled": dy_enabled}
+            cfg["email_on_critical"] = email_crit
+            _alerts.save_alerts_config(cfg)
+            # Clear cached results so they re-run with new settings
+            if "alert_results" in st.session_state:
+                del st.session_state["alert_results"]
+            st.success("Alert settings saved. Click 'Run Alert Checks Now' to apply.")
+            st.rerun()
+
+    with tab_price:
+        st.markdown('<div class="section-title">Price Alert Setup</div>', unsafe_allow_html=True)
+        st.caption("Set a price level for an asset. You will be alerted when the current price crosses that level.")
+
+        assets = sorted(holdings_df["Asset"].dropna().unique().tolist()) if not holdings_df.empty and "Asset" in holdings_df.columns else []
+        price_map = {}
+        if not holdings_df.empty and "Current Price" in holdings_df.columns:
+            price_map = dict(zip(
+                holdings_df.get("Asset", []),
+                pd.to_numeric(holdings_df["Current Price"], errors="coerce").fillna(0),
+            ))
+
+        if not assets:
+            st.warning("Load a portfolio file to set price alerts.")
+        else:
+            pa1, pa2, pa3 = st.columns(3)
+            with pa1:
+                pa_asset = st.selectbox("Asset", assets, key="pa_asset")
+            with pa2:
+                pa_dir   = st.selectbox("Alert when price is", ["above", "below"], key="pa_dir")
+            with pa3:
+                current_px = float(price_map.get(pa_asset, 0))
+                pa_thresh  = st.number_input(
+                    f"Threshold (current: KES {current_px:,.2f})",
+                    min_value=0.0, value=current_px, step=0.5, format="%.2f", key="pa_thresh",
+                )
+
+            if st.button("➕ Add Price Alert", key="pa_add"):
+                existing = cfg.get("price_alerts", [])
+                # Remove duplicate for same asset+direction
+                existing = [p for p in existing if not (p["asset"] == pa_asset and p["direction"] == pa_dir)]
+                existing.append({"asset": pa_asset, "direction": pa_dir, "threshold": pa_thresh})
+                cfg["price_alerts"] = existing
+                _alerts.save_alerts_config(cfg)
+                if "alert_results" in st.session_state:
+                    del st.session_state["alert_results"]
+                st.success(f"Price alert set: {pa_asset} {pa_dir} KES {pa_thresh:,.2f}")
+                st.rerun()
+
+            # Show existing price alerts
+            existing_pa = cfg.get("price_alerts", [])
+            if existing_pa:
+                st.markdown('<div class="section-title">Existing Price Alerts</div>', unsafe_allow_html=True)
+                pa_df = pd.DataFrame(existing_pa)
+                pa_df.columns = ["Asset", "Direction", "Threshold (KES)"]
+                st.dataframe(pa_df, use_container_width=True, hide_index=True)
+
+                del_pa = st.selectbox(
+                    "Remove alert for:",
+                    [f"{p['asset']} {p['direction']} KES {p['threshold']:,.2f}" for p in existing_pa],
+                    key="pa_del",
+                )
+                if st.button("🗑️ Remove Selected Price Alert", key="pa_del_btn"):
+                    del_idx = [f"{p['asset']} {p['direction']} KES {p['threshold']:,.2f}" for p in existing_pa].index(del_pa)
+                    existing_pa.pop(del_idx)
+                    cfg["price_alerts"] = existing_pa
+                    _alerts.save_alerts_config(cfg)
+                    if "alert_results" in st.session_state:
+                        del st.session_state["alert_results"]
+                    st.success("Price alert removed.")
+                    st.rerun()
+
+    with tab_log:
+        st.markdown('<div class="section-title">Alert History Log</div>', unsafe_allow_html=True)
+        log = _alerts.load_alerts_log()
+        if not log:
+            st.info("No alerts have been logged yet.")
+        else:
+            log_df = pd.DataFrame(log)
+            display_cols = [c for c in ["logged_at","type","severity","asset","message","dismissed"] if c in log_df.columns]
+            log_df = log_df[display_cols].sort_values("logged_at", ascending=False) if "logged_at" in log_df.columns else log_df
+
+            def colour_log(row):
+                sev = str(row.get("severity",""))
+                if sev == "CRITICAL": return ["background:#fef2f2"] * len(row)
+                if sev == "WARNING":  return ["background:#fffbeb"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(
+                log_df.style.apply(colour_log, axis=1),
+                use_container_width=True, hide_index=True,
+            )
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("🧹 Clear Dismissed Alerts", key="clear_dismissed"):
+                    _alerts.clear_dismissed()
+                    st.success("Dismissed alerts cleared.")
+                    st.rerun()
+            with c2:
+                csv_log = log_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Alert Log (CSV)",
+                    data=csv_log,
+                    file_name="alerts_log.csv",
+                    mime="text/csv",
+                )
 
 
 # ─── Footer ─────────────────────────────────────────────────────────────────
