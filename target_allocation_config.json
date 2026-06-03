@@ -1,0 +1,931 @@
+{
+  "sector_targets": {
+    "Banking": 15.0,
+    "Cash": 15.1,
+    "ETF": 12.7,
+    "Energy": 14.4,
+    "Fixed Income": 22.5,
+    "Insurance": 11.7,
+    "Telecom": 8.6
+  },
+  "asset_targets": {
+    "Britam": 2.5,
+    "CIC": 3.0,
+    "Co-op Bank": 3.5,
+    "Equity": 4.0,
+    "Jubilee": 6.0,
+    "KCB": 4.5,
+    "KenGen": 2.8,
+    "Kenya Power": 5.5,
+    "Money Market Fund": 15.0,
+    "NCBA": 1.0,
+    "Safaricom": 8.5,
+    "Total Energies Marketing": 5.5,
+    "Treasury Bonds": 25.3,
+    "VOO / IVV": 9.0,
+    "VT": 3.9
+  },
+  "drift_threshold": 5.0,
+  "drift_history": [
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:49",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:50",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:51",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:52",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:52",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 0,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 09:52",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 5.62,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": [
+        "Money Market Fund"
+      ]
+    },
+    {
+      "date": "2026-06-03 10:04",
+      "total_value": 14546263.5,
+      "max_sector_drift": 5.52,
+      "max_asset_drift": 5.62,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": [
+        "Money Market Fund"
+      ]
+    },
+    {
+      "date": "2026-06-03 10:22",
+      "total_value": 14448633.45,
+      "max_sector_drift": 3.11,
+      "max_asset_drift": 1.16,
+      "breached_sectors": [],
+      "breached_assets": []
+    },
+    {
+      "date": "2026-06-03 10:41",
+      "total_value": 14448633.45,
+      "max_sector_drift": 3.11,
+      "max_asset_drift": 1.16,
+      "breached_sectors": [],
+      "breached_assets": []
+    }
+  ]
+}

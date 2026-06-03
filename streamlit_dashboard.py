@@ -12,16 +12,67 @@ rebalancing suggestions, dividends, and performance history.
 """
 
 import os
+import sys
 import glob
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
+# ─── Phase modules (same folder as this script) ────────────────────────────────
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+try:
+    import benchmark   as _bm
+    HAS_BENCHMARK = True
+except ImportError:
+    HAS_BENCHMARK = False
+
+try:
+    import risk_metrics as _rm
+    HAS_RISK_METRICS = True
+except ImportError:
+    HAS_RISK_METRICS = False
+
+try:
+    import cost_tracking as _ct
+    HAS_COST_TRACKING = True
+except ImportError:
+    HAS_COST_TRACKING = False
+
+try:
+    import target_allocation as _ta
+    HAS_TARGET_ALLOC = True
+except ImportError:
+    HAS_TARGET_ALLOC = False
+
+try:
+    import corporate_actions as _ca
+    HAS_CORP_ACTIONS = True
+except ImportError:
+    HAS_CORP_ACTIONS = False
+
 # ─── Page config ───────────────────────────────────────────────────────────────
+# Load icon for page tab (must be done before set_page_config)
+import base64 as _b64_early
+import os as _os_early
+
+def _get_icon():
+    _icon_path = _os_early.path.join(_os_early.path.dirname(_os_early.path.abspath(__file__)), "Icon.png")
+    try:
+        with open(_icon_path, "rb") as _f:
+            return _f.read()
+    except Exception:
+        return "📈"
+
+_tab_icon = _get_icon()
+
 st.set_page_config(
-    page_title="NSE Portfolio Tracker",
-    page_icon="📈",
+    page_title="PRO_LAW Portfolio Tracker",
+    page_icon=_tab_icon,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -36,93 +87,247 @@ SOFT_BEIGE   = "#EAECE6"
 BORDER_COLOR = "#B8AA91"
 ACCENT       = "#7A8C6E"
 
-# ─── Custom CSS ────────────────────────────────────────────────────────────────
+# ─── Custom CSS (Insightfolio-inspired, PRO_LAW branded) ──────────────────────
 st.markdown(f"""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@300;400;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
+  /* ── Global ── */
   html, body, [class*="css"] {{
-      font-family: 'Source Sans 3', sans-serif;
+      font-family: 'Inter', sans-serif;
       background-color: {WARM_WHITE};
       color: {TEXT_DARK};
   }}
+  .block-container {{ padding-top: 2.8rem; padding-bottom: 2rem; }}
 
-  /* Sidebar */
-  section[data-testid="stSidebar"] {{
-      background-color: {DARK_OLIVE} !important;
+  /* ── Fix header overlap with Streamlit top bar ── */
+  header[data-testid="stHeader"] {{
+      background: rgba(253,251,247,0.95);
+      backdrop-filter: blur(4px);
   }}
-  section[data-testid="stSidebar"] * {{
-      color: {CREAM} !important;
-  }}
-  section[data-testid="stSidebar"] .stRadio label {{
-      color: {CREAM} !important;
-  }}
-
-  /* Main header */
   .main-header {{
-      font-family: 'Playfair Display', serif;
-      font-size: 2.4rem;
-      font-weight: 700;
-      color: {DARK_OLIVE};
-      border-bottom: 3px solid {DARK_OLIVE};
-      padding-bottom: 0.4rem;
-      margin-bottom: 1.5rem;
-  }}
-  .section-title {{
-      font-family: 'Playfair Display', serif;
-      font-size: 1.3rem;
-      font-weight: 600;
-      color: {DARK_OLIVE};
-      margin-top: 2rem;
-      margin-bottom: 0.6rem;
-      border-left: 4px solid {ACCENT};
-      padding-left: 0.6rem;
+      margin-top: 0.5rem;
   }}
 
-  /* KPI cards */
-  .kpi-card {{
-      background: {SOFT_BEIGE};
-      border: 1px solid {BORDER_COLOR};
-      border-radius: 10px;
-      padding: 1.2rem 1.4rem;
-      text-align: center;
+  /* ── Sidebar ── */
+  section[data-testid="stSidebar"] {{
+      background: linear-gradient(180deg, {DARK_OLIVE} 0%, #2a3228 100%) !important;
+      border-right: 1px solid rgba(241,233,203,0.12);
   }}
+  section[data-testid="stSidebar"] * {{ color: {CREAM} !important; }}
+  section[data-testid="stSidebar"] .stRadio label {{
+      color: rgba(241,233,203,0.85) !important;
+      font-size: 0.875rem;
+      font-weight: 400;
+      padding: 0.35rem 0;
+      transition: color 0.15s;
+  }}
+  section[data-testid="stSidebar"] .stRadio label:hover {{
+      color: {CREAM} !important;
+  }}
+  /* Selected nav item highlight */
+  section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
+      color: rgba(241,233,203,0.55) !important;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-top: 1.2rem;
+      margin-bottom: 0.3rem;
+  }}
+  /* Sidebar logo area */
+  .sidebar-logo-area {{
+      padding: 0.5rem 0 1.2rem 0;
+      border-bottom: 1px solid rgba(241,233,203,0.15);
+      margin-bottom: 0.8rem;
+  }}
+
+  /* ── Page header ── */
+  .main-header {{
+      font-family: 'Inter', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: {TEXT_DARK};
+      margin-bottom: 0.2rem;
+      letter-spacing: -0.02em;
+  }}
+  .page-subtitle {{
+      font-size: 0.85rem;
+      color: {ACCENT};
+      margin-bottom: 1.6rem;
+      font-weight: 400;
+  }}
+
+  /* ── Section title ── */
+  .section-title {{
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: {ACCENT};
+      margin-top: 2rem;
+      margin-bottom: 0.8rem;
+  }}
+
+  /* ── KPI cards (Insightfolio-style) ── */
+  .kpi-card {{
+      background: #ffffff;
+      border: 1px solid {BORDER_COLOR};
+      border-radius: 12px;
+      padding: 1.25rem 1.4rem;
+      text-align: left;
+      box-shadow: 0 1px 3px rgba(59,68,54,0.06);
+      transition: box-shadow 0.2s;
+  }}
+  .kpi-card:hover {{ box-shadow: 0 4px 12px rgba(59,68,54,0.10); }}
   .kpi-label {{
-      font-size: 0.82rem;
+      font-size: 0.72rem;
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: {ACCENT};
-      margin-bottom: 0.3rem;
+      margin-bottom: 0.5rem;
   }}
   .kpi-value {{
-      font-family: 'Playfair Display', serif;
-      font-size: 1.7rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 1.65rem;
       font-weight: 700;
-      color: {DARK_OLIVE};
+      color: {TEXT_DARK};
+      letter-spacing: -0.02em;
+      line-height: 1.1;
   }}
   .kpi-sub {{
-      font-size: 0.78rem;
+      font-size: 0.75rem;
       color: {ACCENT};
-      margin-top: 0.2rem;
+      margin-top: 0.35rem;
+      font-weight: 400;
+  }}
+  .kpi-delta-up   {{ color:#16a34a; font-size:0.78rem; font-weight:600; margin-top:0.3rem; }}
+  .kpi-delta-down {{ color:#dc2626; font-size:0.78rem; font-weight:600; margin-top:0.3rem; }}
+
+  /* ── Activity / alert cards ── */
+  .alert-card {{
+      background: #fff8e7;
+      border-left: 3px solid #f59e0b;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: {TEXT_DARK};
+  }}
+  .alert-card-ok {{
+      background: #f0fdf4;
+      border-left: 3px solid #16a34a;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: {TEXT_DARK};
+  }}
+  .alert-card-bad {{
+      background: #fff1f2;
+      border-left: 3px solid #dc2626;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: {TEXT_DARK};
   }}
 
-  /* Status badges */
-  .badge-ok  {{ background:#d4edda; color:#155724; padding:3px 10px; border-radius:12px; font-size:0.8rem; }}
-  .badge-warn{{ background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-size:0.8rem; }}
-  .badge-bad {{ background:#f8d7da; color:#721c24; padding:3px 10px; border-radius:12px; font-size:0.8rem; }}
+  /* ── Status badges ── */
+  .badge-ok   {{ background:#dcfce7; color:#166534; padding:3px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }}
+  .badge-warn {{ background:#fef9c3; color:#854d0e; padding:3px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }}
+  .badge-bad  {{ background:#fee2e2; color:#991b1b; padding:3px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }}
 
-  /* DataFrames */
-  .stDataFrame {{ border: 1px solid {BORDER_COLOR}; border-radius: 8px; overflow: hidden; }}
+  /* ── Drift bar ── */
+  .drift-row {{
+      display:flex; align-items:center; gap:0.75rem;
+      padding: 0.6rem 0.8rem;
+      border-radius:8px; margin-bottom:0.35rem;
+      background:#f8f8f6;
+      font-size:0.84rem;
+  }}
+  .drift-label {{ flex:1; font-weight:500; color:{TEXT_DARK}; }}
+  .drift-actual {{ width:60px; text-align:right; color:{ACCENT}; font-size:0.8rem; }}
+  .drift-target {{ width:60px; text-align:right; color:{ACCENT}; font-size:0.8rem; }}
+  .drift-pp-up   {{ width:70px; text-align:right; color:#dc2626; font-weight:700; }}
+  .drift-pp-down {{ width:70px; text-align:right; color:#16a34a; font-weight:700; }}
+  .drift-pp-zero {{ width:70px; text-align:right; color:{ACCENT}; font-weight:600; }}
 
-  /* Plotly chart border */
-  .js-plotly-plot {{ border-radius: 10px; overflow: hidden; }}
+  /* ── Table styling ── */
+  .stDataFrame {{ border: 1px solid {BORDER_COLOR}; border-radius: 10px; overflow: hidden; }}
+  .stDataFrame th {{
+      background-color: {DARK_OLIVE} !important;
+      color: {CREAM} !important;
+      font-size: 0.78rem !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.04em;
+  }}
 
-  /* Remove default top padding */
-  .block-container {{ padding-top: 1.5rem; }}
+  /* ── Plotly ── */
+  .js-plotly-plot {{ border-radius: 12px; overflow: hidden; }}
 
-  /* Metric delta colours */
-  [data-testid="stMetricDelta"] {{ font-size: 0.85rem; }}
+  /* ── Divider ── */
+  hr {{ border-color: {BORDER_COLOR}; opacity:0.4; margin: 1.5rem 0; }}
+
+  /* ── Buttons ── */
+  .stButton > button {{
+      background: {DARK_OLIVE};
+      color: {CREAM};
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 0.5rem 1.2rem;
+      transition: background 0.2s;
+  }}
+  .stButton > button:hover {{ background: #4a5a44; }}
+
+  /* ── Input fields ── */
+  .stTextInput input, .stNumberInput input, .stSelectbox select {{
+      border-radius: 8px !important;
+      border-color: {BORDER_COLOR} !important;
+      font-size: 0.875rem !important;
+  }}
+
+  /* ── Sidebar nav buttons ── */
+  .nav-btn {{
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: rgba(241,233,203,0.80);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.855rem;
+      font-weight: 400;
+      padding: 0.38rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer !important;
+      margin-bottom: 2px;
+      transition: background 0.15s, color 0.15s;
+      line-height: 1.4;
+  }}
+  .nav-btn:hover {{
+      background: rgba(241,233,203,0.10);
+      color: #F1E9CB;
+  }}
+  .nav-btn.active {{
+      background: rgba(241,233,203,0.18);
+      color: #F1E9CB;
+      font-weight: 600;
+      border-left: 3px solid #F1E9CB;
+      padding-left: 0.45rem;
+  }}
+  /* Pointer cursor on ALL sidebar selectbox elements */
+  section[data-testid="stSidebar"] .stSelectbox,
+  section[data-testid="stSidebar"] .stSelectbox > div,
+  section[data-testid="stSidebar"] .stSelectbox > div > div,
+  section[data-testid="stSidebar"] [data-baseweb="select"],
+  section[data-testid="stSidebar"] [data-baseweb="select"] * {{
+      cursor: pointer !important;
+  }}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -264,11 +469,39 @@ def style_dataframe(df):
 # SIDEBAR – data source
 # ═══════════════════════════════════════════════════════════════════════════════
 
-with st.sidebar:
-    st.markdown("## 📊 NSE Portfolio Tracker")
-    st.markdown("---")
-    st.markdown("**Data Source**")
+# ── Load logo for sidebar ─────────────────────────────────────────────────────
+import base64 as _b64
 
+def _img_to_b64(path):
+    try:
+        with open(path, "rb") as f:
+            return _b64.b64encode(f.read()).decode()
+    except Exception:
+        return None
+
+_logo_b64 = _img_to_b64(os.path.join(_HERE, "Logo.png"))
+_icon_b64 = _img_to_b64(os.path.join(_HERE, "Icon.png"))
+
+with st.sidebar:
+    # ── Logo ───────────────────────────────────────────────────────────────────
+    if _logo_b64:
+        st.markdown(
+            f'''<div class="sidebar-logo-area" style="padding:0.6rem 0 1rem 0;border-bottom:1px solid rgba(241,233,203,0.15);margin-bottom:0.8rem;">
+            <img src="data:image/png;base64,{_logo_b64}"
+                 style="width:100%;max-width:185px;object-fit:contain;display:block;margin:0 auto;
+                        mix-blend-mode:screen;filter:brightness(1.6) contrast(1.1);" />
+            </div>''',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div style="padding:0.6rem 0 1rem 0;border-bottom:1px solid rgba(241,233,203,0.15);margin-bottom:0.8rem;">' +
+            '<span style="font-size:1.1rem;font-weight:700;color:#F1E9CB;">PRO_LAW</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Data source ────────────────────────────────────────────────────────────
+    st.markdown("DATA SOURCE")
     source_mode = st.radio(
         "Load data from:",
         ["Upload Excel file", "Auto-read from reports/ folder"],
@@ -279,48 +512,82 @@ with st.sidebar:
 
     if source_mode == "Upload Excel file":
         uploaded = st.file_uploader(
-            "Upload your output Excel file",
+            "Upload output Excel file",
             type=["xlsx"],
             help="Upload the *_Dashboard_Output.xlsx file generated by your Python script.",
+            label_visibility="collapsed",
         )
         if uploaded:
             sheets = load_workbook_sheets(uploaded)
-            st.success(f"✅ Loaded: {uploaded.name}")
+            st.markdown(f'<span class="badge-ok">✓ {uploaded.name}</span>', unsafe_allow_html=True)
 
-    else:  # Auto-read from reports/
+    else:
         reports_dir = "reports"
         xlsx_files  = glob.glob(os.path.join(reports_dir, "*_Dashboard_Output.xlsx"))
-
         if not xlsx_files:
-            st.warning(f"No output files found in `{reports_dir}/`.\nRun your Python script first, or switch to Upload mode.")
+            st.markdown('<span class="badge-warn">No files in reports/</span>', unsafe_allow_html=True)
         else:
             chosen = st.selectbox(
-                "Select portfolio file:",
+                "Portfolio:",
                 [os.path.basename(f) for f in xlsx_files],
+                label_visibility="collapsed",
             )
             chosen_path = os.path.join(reports_dir, chosen)
             sheets = load_workbook_sheets(chosen_path, is_path=True)
-            st.success(f"✅ Loaded: {chosen}")
+            st.markdown(f'<span class="badge-ok">✓ Loaded</span>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("**Navigation**")
-    page = st.radio(
-        "Go to:",
-        [
+    st.markdown("&nbsp;", unsafe_allow_html=True)
+
+    # ── Navigation: button-based so any page is always clickable ──────────────
+    # Initialise active page in session state
+    if "active_page" not in st.session_state:
+        st.session_state.active_page = "📈 Portfolio Summary"
+
+    _NAV_GROUPS = [
+        ("PORTFOLIO", [
             "📈 Portfolio Summary",
             "🏦 NSE Live Prices",
             "🥧 Allocation Charts",
+            "💰 Dividends",
+        ]),
+        ("ANALYTICS", [
+            "📊 Benchmark Comparison",
+            "📐 Risk-Adjusted Returns",
+            "💼 Cost & P&L Tracking",
+            "📅 Performance History",
+        ]),
+        ("MANAGEMENT", [
             "⚠️ Risk & Rebalancing",
             "🎛️ Risk Settings",
-            "💰 Dividends",
-            "📅 Performance History",
+            "🎯 Target Allocation",
+            "📋 Corporate Actions",
             "🔄 Transactions",
+        ]),
+        ("SYSTEM", [
             "📧 Reports & Email",
-        ],
-        label_visibility="collapsed",
-    )
+        ]),
+    ]
+
+    for _group_label, _pages in _NAV_GROUPS:
+        st.markdown(_group_label)
+        for _pg in _pages:
+            _is_active = st.session_state.active_page == _pg
+            _cls = "nav-btn active" if _is_active else "nav-btn"
+            if st.button(
+                _pg,
+                key=f"navbtn_{_pg}",
+                use_container_width=True,
+                type="secondary" if not _is_active else "primary",
+            ):
+                st.session_state.active_page = _pg
+                st.rerun()
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+
+    page = st.session_state.active_page
+
     st.markdown("---")
-    st.caption("Dashboard reads your existing script's output.\nRun your Python script to refresh data.")
+    import datetime as _dt2
+    st.caption(f"PRO_LAW Portfolio Tracking\n{_dt2.datetime.now().strftime('%d %b %Y %H:%M')}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -328,7 +595,18 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if not sheets:
-    st.markdown('<div class="main-header">📈 NSE Portfolio Tracker</div>', unsafe_allow_html=True)
+    # Show branded landing
+    if _logo_b64:
+        st.markdown(
+            f'''<div style="text-align:center;margin-top:4rem;">
+            <img src="data:image/png;base64,{_logo_b64}"
+                 style="max-width:320px;margin-bottom:2rem;background:#1a1a1a;
+                        padding:1.5rem;border-radius:16px;" />
+            </div>''',
+            unsafe_allow_html=True,
+        )
+    st.markdown('<div class="main-header" style="text-align:center;">PRO_LAW Portfolio Tracking System</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle" style="text-align:center;">Load a portfolio file to get started</p>', unsafe_allow_html=True)
     st.info(
         "👈 **Get started:** Upload your `*_Dashboard_Output.xlsx` file in the sidebar, "
         "or run your Python script so files appear in the `reports/` folder, "
@@ -343,18 +621,17 @@ if not sheets:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if page == "📈 Portfolio Summary":
-    st.markdown('<div class="main-header">📈 Portfolio Summary</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Portfolio Summary</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Overview of your holdings, market values and allocation</p>', unsafe_allow_html=True)
 
     dash_df     = sheets.get("dashboard", pd.DataFrame())
     holdings_df = sheets.get("holdings",  pd.DataFrame())
+    hist_df     = sheets.get("history",   pd.DataFrame())
+    nse_df      = sheets.get("nse",       pd.DataFrame())
 
-    # ── KPI cards ──────────────────────────────────────────────────────────────
-    total_val   = 0
-    num_assets  = 0
-    num_sectors = 0
-
+    # ── Resolve KPIs ───────────────────────────────────────────────────────────
+    total_val = num_assets = num_sectors = 0
     if not dash_df.empty:
-        # Dashboard1 sheet has summary rows at top
         for _, row in dash_df.iterrows():
             metric = str(row.get("Metric", "")).strip()
             value  = row.get("Value", 0)
@@ -373,41 +650,175 @@ if page == "📈 Portfolio Summary":
         num_assets  = len(holdings_df)
         num_sectors = holdings_df["Sector"].nunique() if "Sector" in holdings_df.columns else 0
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(kpi_card("Total Portfolio Value", fmt_kes(total_val)), unsafe_allow_html=True)
-    with col2:
-        st.markdown(kpi_card("Holdings", str(num_assets), "individual assets"), unsafe_allow_html=True)
-    with col3:
-        st.markdown(kpi_card("Sectors", str(num_sectors), "diversified sectors"), unsafe_allow_html=True)
-
-    # ── Holdings table ─────────────────────────────────────────────────────────
+    # Largest holding & sector
+    largest_asset  = largest_sector = "—"
+    gain_loss_total = 0.0
     if not holdings_df.empty:
-        st.markdown('<div class="section-title">All Holdings</div>', unsafe_allow_html=True)
+        mv_col = "Market Value"
+        if mv_col in holdings_df.columns:
+            holdings_df[mv_col] = pd.to_numeric(holdings_df[mv_col], errors="coerce")
+            idx = holdings_df[mv_col].idxmax()
+            if pd.notna(idx):
+                largest_asset = str(holdings_df.loc[idx, "Asset"]) if "Asset" in holdings_df.columns else "—"
+            if "Sector" in holdings_df.columns:
+                sec_totals = holdings_df.groupby("Sector")[mv_col].sum()
+                largest_sector = str(sec_totals.idxmax()) if not sec_totals.empty else "—"
+        if "Gain/Loss" in holdings_df.columns:
+            gain_loss_total = pd.to_numeric(holdings_df["Gain/Loss"], errors="coerce").fillna(0).sum()
 
-        display_cols = [c for c in [
-            "Asset", "Sector", "Shares", "Buy Price", "Current Price",
-            "Market Value", "Asset Allocation %", "Average Return %",
-            "Gain/Loss", "Price Source",
-        ] if c in holdings_df.columns]
+    # ── KPI row (5 cards, Insightfolio style) ─────────────────────────────────
+    k1, k2, k3, k4, k5 = st.columns(5)
+    gl_colour = "#16a34a" if gain_loss_total >= 0 else "#dc2626"
+    gl_sign   = "+" if gain_loss_total >= 0 else ""
+    with k1:
+        st.markdown(kpi_card("Total Portfolio Value", fmt_kes(total_val), "Current market value"), unsafe_allow_html=True)
+    with k2:
+        st.markdown(kpi_card("Holdings", str(num_assets), "individual positions"), unsafe_allow_html=True)
+    with k3:
+        st.markdown(kpi_card("Sectors", str(num_sectors), "diversified sectors"), unsafe_allow_html=True)
+    with k4:
+        st.markdown(kpi_card("Largest Position", largest_asset, "by market value"), unsafe_allow_html=True)
+    with k5:
+        st.markdown(
+            f'''<div class="kpi-card">
+            <div class="kpi-label">Total Gain / Loss</div>
+            <div class="kpi-value" style="color:{gl_colour};">{gl_sign}KES {gain_loss_total:,.0f}</div>
+            <div class="kpi-sub">Unrealised P&L</div>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+    st.markdown("")
 
-        show_df = holdings_df[display_cols].copy()
+    # ── Two-column layout: holdings table LEFT, activity feed RIGHT ────────────
+    main_col, side_col = st.columns([2, 1], gap="large")
 
-        # Format money columns
-        for col in ["Buy Price", "Current Price", "Market Value", "Gain/Loss"]:
-            if col in show_df.columns:
-                show_df[col] = pd.to_numeric(show_df[col], errors="coerce").map(
-                    lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+    with main_col:
+        st.markdown('<div class="section-title">Holdings</div>', unsafe_allow_html=True)
+        if not holdings_df.empty:
+            display_cols = [c for c in [
+                "Asset", "Sector", "Shares", "Current Price",
+                "Market Value", "Asset Allocation %", "Average Return %", "Gain/Loss",
+            ] if c in holdings_df.columns]
+            show_df = holdings_df[display_cols].copy()
+            for col in ["Current Price", "Market Value", "Gain/Loss"]:
+                if col in show_df.columns:
+                    show_df[col] = pd.to_numeric(show_df[col], errors="coerce").map(
+                        lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                    )
+            for col in ["Asset Allocation %", "Average Return %"]:
+                if col in show_df.columns:
+                    show_df[col] = pd.to_numeric(show_df[col], errors="coerce").map(
+                        lambda x: f"{x:.2f}%" if pd.notna(x) else ""
+                    )
+            st.dataframe(show_df, use_container_width=True, hide_index=True, height=340)
+        else:
+            st.warning("Holdings sheet not found.")
+
+        # Mini allocation pie below table
+        if not holdings_df.empty and "Market Value" in holdings_df.columns and "Asset" in holdings_df.columns:
+            pie_data = holdings_df[["Asset", "Market Value"]].copy()
+            pie_data["Market Value"] = pd.to_numeric(pie_data["Market Value"], errors="coerce")
+            pie_data = pie_data[pie_data["Market Value"] > 0]
+            if not pie_data.empty:
+                st.markdown('<div class="section-title">Asset Allocation</div>', unsafe_allow_html=True)
+                fig_mini = px.pie(
+                    pie_data, names="Asset", values="Market Value",
+                    color_discrete_sequence=px.colors.sequential.Darkmint,
+                    hole=0.4,
                 )
-        for col in ["Asset Allocation %", "Average Return %"]:
-            if col in show_df.columns:
-                show_df[col] = pd.to_numeric(show_df[col], errors="coerce").map(
-                    lambda x: f"{x:.2f}%" if pd.notna(x) else ""
+                fig_mini.update_traces(textposition="outside", textinfo="percent+label")
+                fig_mini.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color=TEXT_DARK,
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    showlegend=False, height=300,
+                )
+                st.plotly_chart(fig_mini, use_container_width=True)
+
+    with side_col:
+        # ── Activity feed (Insightfolio style) ────────────────────────────────
+        st.markdown('<div class="section-title">Activity Feed</div>', unsafe_allow_html=True)
+
+        # NSE price status
+        if not nse_df.empty:
+            unavail = nse_df[nse_df.get("Price Source", pd.Series()).astype(str).str.contains("unavailable", case=False, na=False)]
+            if not unavail.empty:
+                for _, r in unavail.iterrows():
+                    st.markdown(
+                        f'<div class="alert-card">⚠️ Price unavailable: <strong>{r.get("Asset","")}</strong></div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.markdown(
+                    '<div class="alert-card-ok">✓ All NSE prices fetched successfully</div>',
+                    unsafe_allow_html=True,
                 )
 
-        st.dataframe(show_df, use_container_width=True, hide_index=True)
-    else:
-        st.warning("Holdings sheet not found or empty in this file.")
+        # Largest sector concentration
+        if largest_sector != "—":
+            st.markdown(
+                f'<div class="alert-card-ok">📊 Largest sector: <strong>{largest_sector}</strong></div>',
+                unsafe_allow_html=True,
+            )
+
+        # Gain/loss status
+        if gain_loss_total > 0:
+            st.markdown(
+                f'<div class="alert-card-ok">📈 Portfolio up <strong>KES {gain_loss_total:,.0f}</strong> overall</div>',
+                unsafe_allow_html=True,
+            )
+        elif gain_loss_total < 0:
+            st.markdown(
+                f'<div class="alert-card-bad">📉 Portfolio down <strong>KES {abs(gain_loss_total):,.0f}</strong> overall</div>',
+                unsafe_allow_html=True,
+            )
+
+        # Check drift alerts from saved config
+        try:
+            import target_allocation as _ta_feed
+            _cfg = _ta_feed.load_config()
+            _hist = _ta_feed.get_drift_history_df(_cfg)
+            if not _hist.empty:
+                last = _hist.iloc[-1]
+                _thresh = float(_cfg.get("drift_threshold", 5.0))
+                if float(last.get("max_sector_drift", 0)) > _thresh:
+                    breached = last.get("breached_sectors", [])
+                    st.markdown(
+                        f'<div class="alert-card">⚠️ Drift alert: <strong>{", ".join(breached) if breached else "sector"}</strong> exceeded threshold</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        '<div class="alert-card-ok">✓ All allocations within drift threshold</div>',
+                        unsafe_allow_html=True,
+                    )
+        except Exception:
+            pass
+
+        # ── Top 5 positions ────────────────────────────────────────────────────
+        st.markdown('<div class="section-title">Top Positions</div>', unsafe_allow_html=True)
+        if not holdings_df.empty and "Market Value" in holdings_df.columns:
+            top5 = holdings_df.copy()
+            top5["Market Value"] = pd.to_numeric(top5["Market Value"], errors="coerce")
+            top5 = top5.nlargest(5, "Market Value")[["Asset", "Sector", "Market Value", "Asset Allocation %"]].copy()
+            for _, row in top5.iterrows():
+                alloc = pd.to_numeric(row.get("Asset Allocation %", 0), errors="coerce") or 0
+                mv    = pd.to_numeric(row.get("Market Value", 0), errors="coerce") or 0
+                # Progress bar style
+                bar_w = min(100, int(alloc))
+                st.markdown(
+                    f'''<div style="margin-bottom:0.6rem;">
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;font-weight:500;color:{TEXT_DARK};">
+                        <span>{row["Asset"]}</span>
+                        <span style="color:{ACCENT};">{alloc:.1f}%</span>
+                    </div>
+                    <div style="background:{WARM_BEIGE};border-radius:4px;height:5px;margin-top:3px;">
+                        <div style="width:{bar_w}%;background:{DARK_OLIVE};height:5px;border-radius:4px;"></div>
+                    </div>
+                    <div style="font-size:0.75rem;color:{ACCENT};margin-top:2px;">KES {mv:,.0f}</div>
+                    </div>''',
+                    unsafe_allow_html=True,
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -415,7 +826,8 @@ if page == "📈 Portfolio Summary":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🏦 NSE Live Prices":
-    st.markdown('<div class="main-header">🏦 NSE Live Prices</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">NSE Live Prices</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Real-time Nairobi Securities Exchange price data for your holdings</p>', unsafe_allow_html=True)
 
     nse_df = sheets.get("nse", pd.DataFrame())
 
@@ -478,7 +890,8 @@ elif page == "🏦 NSE Live Prices":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🥧 Allocation Charts":
-    st.markdown('<div class="main-header">🥧 Allocation Charts</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Allocation Charts</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Visual breakdown of your portfolio by asset and sector</p>', unsafe_allow_html=True)
 
     holdings_df = sheets.get("holdings", pd.DataFrame())
 
@@ -548,7 +961,8 @@ elif page == "🥧 Allocation Charts":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "⚠️ Risk & Rebalancing":
-    st.markdown('<div class="main-header">⚠️ Risk & Rebalancing</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Risk & Rebalancing</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Concentration violations and holistic rebalancing suggestions</p>', unsafe_allow_html=True)
 
     dash_df = sheets.get("dashboard", pd.DataFrame())
 
@@ -654,7 +1068,8 @@ elif page == "⚠️ Risk & Rebalancing":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "💰 Dividends":
-    st.markdown('<div class="main-header">💰 Dividends</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Dividends</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Annual dividend income, yield by asset and portfolio dividend yield</p>', unsafe_allow_html=True)
 
     div_df = sheets.get("dividends", pd.DataFrame())
 
@@ -729,7 +1144,8 @@ elif page == "💰 Dividends":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "📅 Performance History":
-    st.markdown('<div class="main-header">📅 Performance History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Performance History</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Portfolio value over time, monthly and quarterly return breakdown</p>', unsafe_allow_html=True)
 
     hist_df = sheets.get("history", pd.DataFrame())
 
@@ -833,11 +1249,1140 @@ elif page == "📅 Performance History":
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: BENCHMARK COMPARISON
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "📊 Benchmark Comparison":
+    st.markdown('<div class="main-header">Benchmark Comparison</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Your returns vs NSE 20 Share Index and NASI</p>', unsafe_allow_html=True)
+
+    if not HAS_BENCHMARK:
+        st.error("benchmark.py module not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    hist_df = sheets.get("history", pd.DataFrame())
+
+    # ── Extract portfolio value history from the stacked sheet ─────────────────
+    port_history = pd.DataFrame()
+    if not hist_df.empty:
+        for i, row in hist_df.iterrows():
+            vals = [str(v).strip() for v in row.values if pd.notna(v) and str(v).strip() not in ("", "nan")]
+            if "Portfolio Value" in vals and "Date" in vals:
+                sub = hist_df.iloc[i:].copy()
+                sub.columns = sub.iloc[0]
+                sub = sub[1:].dropna(how="all").reset_index(drop=True)
+                sub["Date"]            = pd.to_datetime(sub["Date"], errors="coerce")
+                sub["Portfolio Value"] = pd.to_numeric(sub["Portfolio Value"], errors="coerce")
+                port_history = sub.dropna(subset=["Date", "Portfolio Value"]).sort_values("Date")
+                break
+
+    if port_history.empty:
+        st.warning("No portfolio history data found. Run your Python script a few times over several days to build history.")
+        st.stop()
+
+    # ── Fetch live benchmark data ──────────────────────────────────────────────
+    st.markdown('<div class="section-title">Live Index Snapshot</div>', unsafe_allow_html=True)
+
+    col_n20, col_nasi, col_refresh = st.columns([1, 1, 0.5])
+
+    with col_refresh:
+        st.markdown("<br>", unsafe_allow_html=True)
+        refresh = st.button("🔄 Refresh Index Data", help="Fetch latest NSE index values from the web")
+
+    if "bm_nse20_current" not in st.session_state or refresh:
+        with st.spinner("Fetching NSE index data…"):
+            st.session_state.bm_nse20_current = _bm.fetch_current_nse20()
+            st.session_state.bm_nasi_current  = _bm.fetch_current_nasi()
+            st.session_state.bm_nse20_hist    = _bm.fetch_historical_nse20(months=18)
+            st.session_state.bm_nasi_hist     = _bm.fetch_historical_nasi(months=18)
+
+    nse20_cur  = st.session_state.bm_nse20_current
+    nasi_cur   = st.session_state.bm_nasi_current
+    nse20_hist = st.session_state.bm_nse20_hist
+    nasi_hist  = st.session_state.bm_nasi_hist
+
+    with col_n20:
+        val = f"{nse20_cur['value']:,.2f}" if nse20_cur.get("value") else "Unavailable"
+        src = nse20_cur.get("source", "")
+        st.markdown(kpi_card("NSE 20 Share Index", val, f"Source: {src}"), unsafe_allow_html=True)
+    with col_nasi:
+        val = f"{nasi_cur['value']:,.2f}" if nasi_cur.get("value") else "Unavailable"
+        src = nasi_cur.get("source", "")
+        st.markdown(kpi_card("NSE All Share (NASI)", val, f"Source: {src}"), unsafe_allow_html=True)
+
+    st.caption(f"Last fetched: {nse20_cur.get('updated', 'unknown')}")
+
+    # ── Build return series ────────────────────────────────────────────────────
+    port_ret  = _bm.compute_portfolio_returns(port_history)
+    nse20_ret = _bm.compute_index_returns(_bm.resample_to_monthly(nse20_hist)) if not nse20_hist.empty else pd.DataFrame()
+    nasi_ret  = _bm.compute_index_returns(_bm.resample_to_monthly(nasi_hist))  if not nasi_hist.empty else pd.DataFrame()
+
+    # ── Summary comparison table ───────────────────────────────────────────────
+    st.markdown('<div class="section-title">Return Comparison Summary</div>', unsafe_allow_html=True)
+    comparison_tbl = _bm.build_comparison_table(port_ret, nse20_ret, nasi_ret)
+    st.dataframe(comparison_tbl, use_container_width=True, hide_index=True)
+
+    # ── Alpha vs NSE 20 ────────────────────────────────────────────────────────
+    alpha_nse20 = _bm.compute_alpha(port_ret, nse20_ret)
+    alpha_nasi  = _bm.compute_alpha(port_ret, nasi_ret)
+
+    a1, a2 = st.columns(2)
+    with a1:
+        if alpha_nse20 is not None:
+            colour = "#28a745" if alpha_nse20 >= 0 else "#dc3545"
+            sign   = "+" if alpha_nse20 >= 0 else ""
+            word   = "outperformed" if alpha_nse20 >= 0 else "underperformed"
+            st.markdown(
+                f'<div class="kpi-card"><div class="kpi-label">Alpha vs NSE 20</div>' +
+                f'<div class="kpi-value" style="color:{colour}">{sign}{alpha_nse20:.2f}%</div>' +
+                f'<div class="kpi-sub">Your portfolio {word} the NSE 20</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(kpi_card("Alpha vs NSE 20", "N/A", "Insufficient index history"), unsafe_allow_html=True)
+
+    with a2:
+        if alpha_nasi is not None:
+            colour = "#28a745" if alpha_nasi >= 0 else "#dc3545"
+            sign   = "+" if alpha_nasi >= 0 else ""
+            word   = "outperformed" if alpha_nasi >= 0 else "underperformed"
+            st.markdown(
+                f'<div class="kpi-card"><div class="kpi-label">Alpha vs NASI</div>' +
+                f'<div class="kpi-value" style="color:{colour}">{sign}{alpha_nasi:.2f}%</div>' +
+                f'<div class="kpi-sub">Your portfolio {word} the NASI</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(kpi_card("Alpha vs NASI", "N/A", "Insufficient index history"), unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # ── Cumulative return chart: portfolio vs both indices ─────────────────────
+    st.markdown('<div class="section-title">Cumulative Return: Portfolio vs Indices</div>', unsafe_allow_html=True)
+
+    fig = go.Figure()
+
+    if not port_ret.empty and "Return_pct" in port_ret.columns:
+        fig.add_trace(go.Scatter(
+            x=port_ret["Date"], y=port_ret["Return_pct"],
+            mode="lines+markers", name="Your Portfolio",
+            line=dict(color=DARK_OLIVE, width=3),
+            marker=dict(size=5),
+        ))
+
+    if not nse20_ret.empty and "Return_pct" in nse20_ret.columns:
+        fig.add_trace(go.Scatter(
+            x=nse20_ret["Date"], y=nse20_ret["Return_pct"],
+            mode="lines", name=_bm.NSE20_NAME,
+            line=dict(color="#C0392B", width=2, dash="dash"),
+        ))
+
+    if not nasi_ret.empty and "Return_pct" in nasi_ret.columns:
+        fig.add_trace(go.Scatter(
+            x=nasi_ret["Date"], y=nasi_ret["Return_pct"],
+            mode="lines", name=_bm.NASI_NAME,
+            line=dict(color="#2980B9", width=2, dash="dot"),
+        ))
+
+    fig.add_hline(y=0, line_dash="solid", line_color=BORDER_COLOR, line_width=1)
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor ="rgba(0,0,0,0)",
+        font_color   =TEXT_DARK,
+        title        ="Cumulative Return % (from common start date)",
+        title_font   =dict(family="Playfair Display", size=16, color=DARK_OLIVE),
+        xaxis_title  ="Date",
+        yaxis_title  ="Cumulative Return %",
+        legend       =dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode    ="x unified",
+        margin       =dict(t=80, b=40, l=20, r=20),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Note if index data unavailable ────────────────────────────────────────
+    if nse20_hist.empty and nasi_hist.empty:
+        st.info(
+            "📡 Historical index data could not be fetched automatically. "
+            "This can happen due to website changes or network restrictions. "
+            "Your portfolio return is still shown above. "
+            "Try clicking **Refresh Index Data** or check your internet connection."
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: RISK-ADJUSTED RETURNS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "📐 Risk-Adjusted Returns":
+    st.markdown('<div class="main-header">Risk-Adjusted Returns</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Sharpe, Sortino, VaR, drawdown and volatility metrics</p>', unsafe_allow_html=True)
+
+    if not HAS_RISK_METRICS:
+        st.error("risk_metrics.py module not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    hist_df = sheets.get("history", pd.DataFrame())
+
+    # Extract portfolio value history
+    port_history = pd.DataFrame()
+    if not hist_df.empty:
+        for i, row in hist_df.iterrows():
+            vals = [str(v).strip() for v in row.values if pd.notna(v) and str(v).strip() not in ("", "nan")]
+            if "Portfolio Value" in vals and "Date" in vals:
+                sub = hist_df.iloc[i:].copy()
+                sub.columns = sub.iloc[0]
+                sub = sub[1:].dropna(how="all").reset_index(drop=True)
+                sub["Date"]            = pd.to_datetime(sub["Date"], errors="coerce")
+                sub["Portfolio Value"] = pd.to_numeric(sub["Portfolio Value"], errors="coerce")
+                port_history = sub.dropna(subset=["Date", "Portfolio Value"]).sort_values("Date")
+                break
+
+    if port_history.empty or len(port_history) < 3:
+        st.warning(
+            "Not enough portfolio history to compute risk metrics — need at least 3 data points. "
+            "Run your Python script periodically to build up history."
+        )
+        st.stop()
+
+    # Get benchmark history from session state if available
+    bm_hist = None
+    if "bm_nse20_hist" in st.session_state and not st.session_state.bm_nse20_hist.empty:
+        bm_hist = st.session_state.bm_nse20_hist
+
+    # ── Risk-free rate override ────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Settings</div>', unsafe_allow_html=True)
+    rf_col, _ = st.columns([1, 2])
+    with rf_col:
+        rf_override = st.number_input(
+            "Risk-Free Rate % p.a. (Kenya 91-day T-bill)",
+            min_value=0.0, max_value=50.0,
+            value=float(_rm.RISK_FREE_RATE_ANNUAL * 100),
+            step=0.25,
+            help="Update this to the current CBK 91-day T-bill rate. "
+                 "Check https://www.centralbank.go.ke",
+        )
+        _rm.RISK_FREE_RATE_ANNUAL = rf_override / 100
+
+    # ── Metrics table ──────────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Risk Metric Summary</div>', unsafe_allow_html=True)
+
+    metrics_df = _rm.build_risk_metrics_table(port_history, bm_hist)
+
+    # Colour-code the Value column
+    def highlight_metric(row):
+        metric = str(row.get("Metric", ""))
+        value  = str(row.get("Value",  ""))
+        if "Sharpe" in metric or "Sortino" in metric or "Calmar" in metric:
+            try:
+                v = float(value.split()[0])
+                if v >= 1:    return ["", f"background-color:#d4edda; color:#155724", ""]
+                if v >= 0:    return ["", f"background-color:#fff3cd; color:#856404", ""]
+                return             ["", f"background-color:#f8d7da; color:#721c24", ""]
+            except Exception:
+                pass
+        if "Drawdown" in metric:
+            try:
+                v = float(value.split("%")[0])
+                if v >= -5:   return ["", f"background-color:#d4edda; color:#155724", ""]
+                if v >= -15:  return ["", f"background-color:#fff3cd; color:#856404", ""]
+                return             ["", f"background-color:#f8d7da; color:#721c24", ""]
+            except Exception:
+                pass
+        return ["", "", ""]
+
+    styled = metrics_df.style.apply(highlight_metric, axis=1)
+    st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    # ── KPI spotlight ──────────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Key Metrics Spotlight</div>', unsafe_allow_html=True)
+
+    sharpe  = _rm.sharpe_ratio(port_history)
+    vol     = _rm.annualised_volatility(port_history)
+    max_dd, dd_peak, dd_trough = _rm.maximum_drawdown(port_history)
+    var95   = _rm.value_at_risk(port_history)
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        sv = f"{sharpe:.2f}" if sharpe is not None else "N/A"
+        st.markdown(kpi_card("Sharpe Ratio", sv, "Return per unit of risk"), unsafe_allow_html=True)
+    with k2:
+        vv = f"{vol:.2f}%" if vol is not None else "N/A"
+        st.markdown(kpi_card("Annualised Volatility", vv, "Year-on-year swing"), unsafe_allow_html=True)
+    with k3:
+        dv = f"{max_dd:.2f}%" if max_dd is not None else "N/A"
+        st.markdown(kpi_card("Max Drawdown", dv, f"{dd_peak} → {dd_trough}" if dd_peak else ""), unsafe_allow_html=True)
+    with k4:
+        rv = f"{var95:.2f}%" if var95 is not None else "N/A"
+        st.markdown(kpi_card("VaR (95%)", rv, "Max loss in 95% of periods"), unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # ── Rolling Sharpe chart ───────────────────────────────────────────────────
+    rolling = _rm.rolling_sharpe(port_history, window=3)
+    if not rolling.empty:
+        st.markdown('<div class="section-title">Rolling Sharpe Ratio (3-month window)</div>', unsafe_allow_html=True)
+
+        fig = go.Figure()
+        fig.add_hline(y=1,  line_dash="dash",  line_color="#28a745", line_width=1,
+                      annotation_text="Good (1.0)",  annotation_position="right")
+        fig.add_hline(y=0,  line_dash="solid", line_color=BORDER_COLOR, line_width=1,
+                      annotation_text="Break-even",  annotation_position="right")
+
+        colors_roll = [DARK_OLIVE if v >= 0 else "#C0392B" for v in rolling["Rolling_Sharpe"]]
+        fig.add_trace(go.Bar(
+            x=rolling["Date"], y=rolling["Rolling_Sharpe"],
+            marker_color=colors_roll,
+            name="Rolling Sharpe",
+            text=rolling["Rolling_Sharpe"].map(lambda x: f"{x:.2f}"),
+            textposition="outside",
+        ))
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor ="rgba(0,0,0,0)",
+            font_color   =TEXT_DARK,
+            title        ="Rolling 3-Month Sharpe Ratio",
+            title_font   =dict(family="Playfair Display", size=16, color=DARK_OLIVE),
+            xaxis_title  ="Date",
+            yaxis_title  ="Sharpe Ratio",
+            margin       =dict(t=80, b=40, l=20, r=20),
+            hovermode    ="x unified",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ── Return distribution ────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Monthly Return Distribution</div>', unsafe_allow_html=True)
+    rets = _rm._to_periodic_returns(port_history, "ME") * 100
+    if len(rets) >= 3:
+        fig2 = go.Figure()
+        fig2.add_trace(go.Histogram(
+            x=rets,
+            nbinsx=max(5, len(rets) // 2),
+            marker_color=DARK_OLIVE,
+            opacity=0.8,
+            name="Monthly Returns",
+        ))
+        fig2.add_vline(
+            x=float(rets.mean()), line_dash="dash",
+            line_color=ACCENT, line_width=2,
+            annotation_text=f"Mean: {rets.mean():.2f}%",
+            annotation_position="top right",
+        )
+        fig2.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor ="rgba(0,0,0,0)",
+            font_color   =TEXT_DARK,
+            title        ="Distribution of Monthly Returns",
+            title_font   =dict(family="Playfair Display", size=16, color=DARK_OLIVE),
+            xaxis_title  ="Monthly Return %",
+            yaxis_title  ="Frequency",
+            margin       =dict(t=80, b=40, l=20, r=20),
+            bargap       =0.05,
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+        st.caption(
+            f"Mean monthly return: **{rets.mean():.2f}%** · "
+            f"Std dev: **{rets.std():.2f}%** · "
+            f"Positive months: **{(rets > 0).sum()}** / {len(rets)}"
+        )
+    else:
+        st.info("Need more monthly data points to show distribution.")
+
+    # ── Glossary ───────────────────────────────────────────────────────────────
+    with st.expander("📖 Metric Definitions"):
+        st.markdown("""
+| Metric | What it means |
+|--------|--------------|
+| **Sharpe Ratio** | Return earned above the risk-free rate per unit of total risk. Above 1 is good, above 2 is excellent. |
+| **Sortino Ratio** | Like Sharpe but only penalises *downside* volatility. Better measure for asymmetric returns. |
+| **Annualised Volatility** | Standard deviation of returns scaled to a year. Lower = more stable portfolio. |
+| **Maximum Drawdown** | Largest peak-to-trough decline in portfolio value. Shows worst-case historical loss. |
+| **Calmar Ratio** | Annualised return divided by max drawdown. Higher = better return for the risk taken. |
+| **VaR (95%)** | In 95% of periods your loss will not exceed this %. The worst 5% of periods could be worse. |
+| **Beta** | How much your portfolio moves relative to the NSE 20. Beta of 1 = moves with market exactly. |
+| **Risk-Free Rate** | The Kenya 91-day T-bill rate — what you'd earn with zero risk. Used as the baseline for ratio calculations. |
+        """)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: COST & P&L TRACKING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "💼 Cost & P&L Tracking":
+    st.markdown('<div class="main-header">Cost & P&L Tracking</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">True profit and loss, capital deployed, and per-asset cost basis</p>', unsafe_allow_html=True)
+
+    if not HAS_COST_TRACKING:
+        st.error("cost_tracking.py module not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    tx_df       = sheets.get("tx",       pd.DataFrame())
+    holdings_df = sheets.get("holdings", pd.DataFrame())
+
+    if tx_df.empty:
+        st.warning(
+            "No transaction data found. Run your Python script at least once "
+            "to generate the Transactions sheet in the output Excel file."
+        )
+        st.stop()
+
+    # Current market value from holdings
+    current_mv = 0.0
+    if not holdings_df.empty and "Market Value" in holdings_df.columns:
+        current_mv = pd.to_numeric(holdings_df["Market Value"], errors="coerce").fillna(0).sum()
+
+    # ── Summary KPI cards ──────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Capital Overview</div>', unsafe_allow_html=True)
+
+    invested  = _ct.total_capital_invested(tx_df)
+    withdrawn = _ct.total_capital_withdrawn(tx_df)
+    net_dep   = _ct.net_capital_deployed(tx_df)
+    true_pl   = _ct.true_profit_loss(tx_df, current_mv)
+    roic      = _ct.return_on_invested_capital(tx_df, current_mv)
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+    with k1:
+        st.markdown(kpi_card("Total Invested", f"KES {invested:,.0f}", "All buy transactions"), unsafe_allow_html=True)
+    with k2:
+        st.markdown(kpi_card("Total Withdrawn", f"KES {withdrawn:,.0f}", "All sell proceeds"), unsafe_allow_html=True)
+    with k3:
+        st.markdown(kpi_card("Net Deployed", f"KES {net_dep:,.0f}", "Cash still in market"), unsafe_allow_html=True)
+    with k4:
+        colour = "#28a745" if true_pl >= 0 else "#dc3545"
+        sign   = "+" if true_pl >= 0 else ""
+        st.markdown(
+            f'<div class="kpi-card"><div class="kpi-label">True P&L</div>' +
+            f'<div class="kpi-value" style="color:{colour}">{sign}KES {true_pl:,.0f}</div>' +
+            f'<div class="kpi-sub">Market value vs net deployed</div></div>',
+            unsafe_allow_html=True,
+        )
+    with k5:
+        roic_str = f"{roic:+.2f}%" if roic is not None else "N/A"
+        colour   = "#28a745" if (roic or 0) >= 0 else "#dc3545"
+        st.markdown(
+            f'<div class="kpi-card"><div class="kpi-label">ROIC</div>' +
+            f'<div class="kpi-value" style="color:{colour}">{roic_str}</div>' +
+            f'<div class="kpi-sub">Return on invested capital</div></div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown("")
+
+    # Realised vs unrealised split
+    real_gain   = _ct.realised_gain_total(tx_df)
+    unreal_gain = _ct.unrealised_gain_total(tx_df)
+    g1, g2 = st.columns(2)
+    with g1:
+        colour = "#28a745" if real_gain >= 0 else "#dc3545"
+        st.markdown(
+            f'<div class="kpi-card"><div class="kpi-label">Realised Gains</div>' +
+            f'<div class="kpi-value" style="color:{colour}">KES {real_gain:,.2f}</div>' +
+            f'<div class="kpi-sub">Locked-in profit from completed sells</div></div>',
+            unsafe_allow_html=True,
+        )
+    with g2:
+        colour = "#28a745" if unreal_gain >= 0 else "#dc3545"
+        st.markdown(
+            f'<div class="kpi-card"><div class="kpi-label">Unrealised Gains</div>' +
+            f'<div class="kpi-value" style="color:{colour}">KES {unreal_gain:,.2f}</div>' +
+            f'<div class="kpi-sub">Paper profit on open positions</div></div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown("")
+
+    # ── Realised vs unrealised donut ───────────────────────────────────────────
+    if real_gain != 0 or unreal_gain != 0:
+        rvu_data = pd.DataFrame({
+            "Type" : ["Realised Gains", "Unrealised Gains"],
+            "Value": [abs(real_gain), abs(unreal_gain)],
+        })
+        fig_rvu = px.pie(
+            rvu_data, names="Type", values="Value",
+            title="Realised vs Unrealised Gains",
+            color_discrete_sequence=[DARK_OLIVE, ACCENT],
+            hole=0.45,
+        )
+        fig_rvu.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor ="rgba(0,0,0,0)",
+            font_color   =TEXT_DARK,
+            title_font   =dict(family="Playfair Display", size=16, color=DARK_OLIVE),
+            margin       =dict(t=60, b=20, l=20, r=20),
+        )
+        rvu_col, _ = st.columns([1, 1])
+        with rvu_col:
+            st.plotly_chart(fig_rvu, use_container_width=True)
+
+    # ── Full summary table ─────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Detailed Cost Summary</div>', unsafe_allow_html=True)
+    summary_tbl = _ct.build_cost_summary(tx_df, current_mv)
+    st.dataframe(summary_tbl, use_container_width=True, hide_index=True)
+
+    # ── Cash flow timeline ─────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Cash Flow Timeline</div>', unsafe_allow_html=True)
+    cf_timeline = _ct.build_cashflow_timeline(tx_df)
+
+    if not cf_timeline.empty:
+        # Waterfall-style: capital in as negative bars, capital out as positive
+        fig_cf = go.Figure()
+        fig_cf.add_trace(go.Bar(
+            x=cf_timeline["Month"].astype(str),
+            y=-cf_timeline["Capital_In"],
+            name="Capital Invested",
+            marker_color="#C0392B",
+            opacity=0.85,
+        ))
+        fig_cf.add_trace(go.Bar(
+            x=cf_timeline["Month"].astype(str),
+            y=cf_timeline["Capital_Out"],
+            name="Capital Withdrawn",
+            marker_color="#28a745",
+            opacity=0.85,
+        ))
+        fig_cf.update_layout(
+            barmode     ="relative",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor ="rgba(0,0,0,0)",
+            font_color   =TEXT_DARK,
+            title        ="Monthly Capital Flows (invested = negative, withdrawn = positive)",
+            title_font   =dict(family="Playfair Display", size=15, color=DARK_OLIVE),
+            xaxis_title  ="Month",
+            yaxis_title  ="KES",
+            margin       =dict(t=80, b=60, l=20, r=20),
+            hovermode    ="x unified",
+            legend       =dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_cf, use_container_width=True)
+
+        # Cumulative net capital deployed line
+        st.markdown('<div class="section-title">Cumulative Net Capital Deployed</div>', unsafe_allow_html=True)
+        fig_cum = go.Figure()
+        fig_cum.add_trace(go.Scatter(
+            x=cf_timeline["Month"].astype(str),
+            y=cf_timeline["Net_Capital_Deployed"],
+            mode="lines+markers",
+            fill="tozeroy",
+            fillcolor=f"rgba(59,68,54,0.10)",
+            line=dict(color=DARK_OLIVE, width=2.5),
+            marker=dict(size=6, color=ACCENT),
+            name="Net Capital Deployed",
+        ))
+        fig_cum.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor ="rgba(0,0,0,0)",
+            font_color   =TEXT_DARK,
+            title        ="Cumulative Net Capital Deployed Over Time",
+            title_font   =dict(family="Playfair Display", size=15, color=DARK_OLIVE),
+            xaxis_title  ="Month",
+            yaxis_title  ="KES",
+            margin       =dict(t=80, b=60, l=20, r=20),
+            hovermode    ="x unified",
+        )
+        st.plotly_chart(fig_cum, use_container_width=True)
+    else:
+        st.info("Not enough transaction history to build cash flow timeline.")
+
+    # ── Investment pace ────────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Monthly Investment Pace</div>', unsafe_allow_html=True)
+    pace_df = _ct.build_investment_pace(tx_df)
+    if not pace_df.empty:
+        fig_pace = px.bar(
+            pace_df,
+            x="Month",
+            y="Capital Invested (KES)",
+            title="Capital Invested Per Month",
+            color_discrete_sequence=[DARK_OLIVE],
+            text="Capital Invested (KES)",
+        )
+        fig_pace.update_traces(
+            texttemplate="KES %{text:,.0f}",
+            textposition="outside",
+        )
+        fig_pace.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor ="rgba(0,0,0,0)",
+            font_color   =TEXT_DARK,
+            title_font   =dict(family="Playfair Display", size=15, color=DARK_OLIVE),
+            xaxis_tickangle=-35,
+            margin       =dict(t=80, b=80, l=20, r=20),
+        )
+        st.plotly_chart(fig_pace, use_container_width=True)
+        st.dataframe(pace_df, use_container_width=True, hide_index=True)
+
+    # ── Per-asset cost basis breakdown ─────────────────────────────────────────
+    st.markdown('<div class="section-title">Per-Asset Cost Basis & P&L</div>', unsafe_allow_html=True)
+    cost_tbl = _ct.build_cost_basis_table(tx_df, holdings_df)
+
+    if not cost_tbl.empty:
+        # Colour P&L columns
+        def colour_pl(val):
+            try:
+                v = float(str(val).replace(",", "").replace("KES", "").replace("%", "").strip())
+                if v > 0:  return "color: #28a745; font-weight:600"
+                if v < 0:  return "color: #dc3545; font-weight:600"
+            except Exception:
+                pass
+            return ""
+
+        pl_cols = ["Unrealised P&L (KES)", "Unrealised P&L %", "Realised P&L (KES)", "Total P&L (KES)"]
+        money_cols = ["Avg Purchase Price", "Current Price", "Cost Basis (KES)",
+                      "Market Value (KES)"] + pl_cols
+
+        display_tbl = cost_tbl.copy()
+        for col in money_cols:
+            if col in display_tbl.columns:
+                if "%" in col:
+                    display_tbl[col] = pd.to_numeric(display_tbl[col], errors="coerce").map(
+                        lambda x: f"{x:+.2f}%" if pd.notna(x) else ""
+                    )
+                else:
+                    display_tbl[col] = pd.to_numeric(display_tbl[col], errors="coerce").map(
+                        lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                    )
+
+        styled = display_tbl.style.map(colour_pl, subset=[c for c in pl_cols if c in display_tbl.columns])
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+
+        # P&L bar chart per asset
+        chart_data = cost_tbl[["Asset", "Total P&L (KES)"]].copy()
+        chart_data["Total P&L (KES)"] = pd.to_numeric(chart_data["Total P&L (KES)"], errors="coerce").fillna(0)
+        chart_data = chart_data[chart_data["Total P&L (KES)"] != 0].sort_values("Total P&L (KES)", ascending=True)
+
+        if not chart_data.empty:
+            st.markdown('<div class="section-title">Total P&L by Asset</div>', unsafe_allow_html=True)
+            colours = ["#28a745" if v >= 0 else "#dc3545" for v in chart_data["Total P&L (KES)"]]
+            fig_pl = go.Figure(go.Bar(
+                x=chart_data["Total P&L (KES)"],
+                y=chart_data["Asset"],
+                orientation="h",
+                marker_color=colours,
+                text=chart_data["Total P&L (KES)"].map(lambda x: f"KES {x:,.2f}"),
+                textposition="outside",
+            ))
+            fig_pl.add_vline(x=0, line_dash="solid", line_color=BORDER_COLOR, line_width=1)
+            fig_pl.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor ="rgba(0,0,0,0)",
+                font_color   =TEXT_DARK,
+                title        ="Total P&L per Asset (Realised + Unrealised)",
+                title_font   =dict(family="Playfair Display", size=15, color=DARK_OLIVE),
+                xaxis_title  ="KES",
+                margin       =dict(t=80, b=40, l=120, r=80),
+            )
+            st.plotly_chart(fig_pl, use_container_width=True)
+    else:
+        st.info("Could not compute per-asset cost basis — check that transactions have Cost Basis and Position Quantity columns.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: TARGET ALLOCATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "🎯 Target Allocation":
+    st.markdown('<div class="main-header">🎯 Target Allocation</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Define target weights, monitor drift, and get trade suggestions to restore balance</p>', unsafe_allow_html=True)
+
+    if not HAS_TARGET_ALLOC:
+        st.error("target_allocation.py not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    holdings_df = sheets.get("holdings", pd.DataFrame())
+    if holdings_df.empty:
+        st.warning("Holdings data not found in the loaded file.")
+        st.stop()
+
+    holdings_df["Market Value"]  = pd.to_numeric(holdings_df.get("Market Value",  0), errors="coerce").fillna(0)
+    holdings_df["Current Price"] = pd.to_numeric(holdings_df.get("Current Price", 0), errors="coerce").fillna(0)
+    total_mv = holdings_df["Market Value"].sum()
+
+    config = _ta.load_config()
+
+    # ── Drift threshold slider ─────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Drift Alert Threshold</div>', unsafe_allow_html=True)
+    threshold = st.slider(
+        "Alert me when drift exceeds (percentage points)",
+        min_value=1.0, max_value=20.0,
+        value=float(config.get("drift_threshold", 5.0)),
+        step=0.5,
+        help="e.g. 5pp means you get alerted if an asset moves more than 5 percentage points from its target.",
+    )
+    config["drift_threshold"] = threshold
+
+    # ── Tabs: sector targets | asset targets | drift monitor | trade plan ──────
+    tab1, tab2, tab3, tab4 = st.tabs(["🏦 Sector Targets", "📌 Asset Targets", "📡 Drift Monitor", "🔁 Trade Plan"])
+
+    # ── TAB 1: Sector Targets ──────────────────────────────────────────────────
+    with tab1:
+        st.markdown('<div class="section-title">Set Target Weight per Sector</div>', unsafe_allow_html=True)
+        st.caption("Weights should sum to 100%. Sectors excluded from risk rules (Cash, Fixed Income) can still have targets here.")
+
+        sectors = sorted(holdings_df["Sector"].dropna().unique().tolist()) if "Sector" in holdings_df.columns else []
+        sector_targets = config.get("sector_targets", {})
+
+        if not sectors:
+            st.warning("No sectors found in holdings data.")
+        else:
+            # Actual current weights for reference
+            sector_actual = (holdings_df.groupby("Sector")["Market Value"].sum() / total_mv * 100).to_dict() if total_mv > 0 else {}
+
+            cols_per_row = 3
+            sector_new_targets = {}
+            rows = [sectors[i:i+cols_per_row] for i in range(0, len(sectors), cols_per_row)]
+
+            for row_sectors in rows:
+                cols = st.columns(cols_per_row)
+                for col, sector in zip(cols, row_sectors):
+                    with col:
+                        actual_pct = sector_actual.get(sector, 0)
+                        default    = float(sector_targets.get(sector, round(actual_pct, 1)))
+                        val = st.number_input(
+                            f"{sector}  *(actual {actual_pct:.1f}%)*",
+                            min_value=0.0, max_value=100.0,
+                            value=default, step=0.5,
+                            key=f"sector_tgt_{sector}",
+                            format="%.1f",
+                        )
+                        sector_new_targets[sector] = val
+
+            valid, msg, total_pct = _ta.validate_targets(sector_new_targets)
+            if valid:
+                st.markdown(f'<span class="badge-ok">{msg}</span>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<span class="badge-bad">{msg}</span>', unsafe_allow_html=True)
+
+            if st.button("💾 Save Sector Targets", key="save_sector_tgt", type="primary"):
+                config["sector_targets"] = sector_new_targets
+                _ta.save_config(config)
+                st.success("Sector targets saved.")
+                st.rerun()
+
+    # ── TAB 2: Asset Targets ───────────────────────────────────────────────────
+    with tab2:
+        st.markdown('<div class="section-title">Set Target Weight per Asset</div>', unsafe_allow_html=True)
+        st.caption("Individual asset targets give finer control. Leave at 0 for assets you do not want to target individually.")
+
+        assets = sorted(holdings_df["Asset"].dropna().unique().tolist()) if "Asset" in holdings_df.columns else []
+        asset_targets = config.get("asset_targets", {})
+
+        if not assets:
+            st.warning("No assets found in holdings data.")
+        else:
+            asset_actual = (holdings_df.set_index("Asset")["Market Value"] / total_mv * 100).to_dict() if total_mv > 0 else {}
+
+            cols_per_row = 3
+            asset_new_targets = {}
+            rows = [assets[i:i+cols_per_row] for i in range(0, len(assets), cols_per_row)]
+
+            for row_assets in rows:
+                cols = st.columns(cols_per_row)
+                for col, asset in zip(cols, row_assets):
+                    with col:
+                        actual_pct = asset_actual.get(asset, 0)
+                        default    = float(asset_targets.get(asset, 0.0))
+                        val = st.number_input(
+                            f"{asset}  *(actual {actual_pct:.1f}%)*",
+                            min_value=0.0, max_value=100.0,
+                            value=default, step=0.5,
+                            key=f"asset_tgt_{asset}",
+                            format="%.1f",
+                        )
+                        asset_new_targets[asset] = val
+
+            # Only keep non-zero targets
+            asset_new_targets_nz = {k: v for k, v in asset_new_targets.items() if v > 0}
+            valid_a, msg_a, total_pct_a = _ta.validate_targets(asset_new_targets_nz)
+            if valid_a:
+                st.markdown(f'<span class="badge-ok">{msg_a}</span>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<span class="badge-bad">{msg_a}</span>', unsafe_allow_html=True)
+
+            if st.button("💾 Save Asset Targets", key="save_asset_tgt", type="primary"):
+                config["asset_targets"] = asset_new_targets_nz
+                _ta.save_config(config)
+                st.success("Asset targets saved.")
+                st.rerun()
+
+    # ── TAB 3: Drift Monitor ───────────────────────────────────────────────────
+    with tab3:
+        st.markdown('<div class="section-title">Current Drift vs Targets</div>', unsafe_allow_html=True)
+
+        sector_targets_saved = config.get("sector_targets", {})
+        asset_targets_saved  = config.get("asset_targets",  {})
+
+        if not sector_targets_saved and not asset_targets_saved:
+            st.info("Set targets in the Sector Targets or Asset Targets tabs first, then come back here.")
+        else:
+            # Sector drift
+            if sector_targets_saved:
+                st.markdown("**Sector Drift**")
+                s_drift = _ta.compute_sector_drift(holdings_df, sector_targets_saved)
+                s_breached = _ta.get_breached(s_drift, threshold)
+
+                # Summary alert banners
+                if not s_breached.empty:
+                    for _, br in s_breached.iterrows():
+                        direction = "▲ Overweight" if br["Drift (pp)"] > 0 else "▼ Underweight"
+                        badge_cls = "alert-card" if abs(br["Drift (pp)"]) < threshold * 2 else "alert-card-bad"
+                        st.markdown(
+                            f'<div class="{badge_cls}"><strong>{br["Sector"]}</strong> — {direction} by <strong>{abs(br["Drift (pp)"]):.1f}pp</strong> '
+                            f'(Actual: {br["Actual %"]:.1f}% · Target: {br["Target %"]:.1f}%)</div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.markdown('<div class="alert-card-ok">✓ All sectors within drift threshold</div>', unsafe_allow_html=True)
+
+                # Drift bar chart
+                if not s_drift.empty:
+                    colours = ["#dc2626" if v > 0 else "#16a34a" for v in s_drift["Drift (pp)"]]
+                    fig_sd = go.Figure(go.Bar(
+                        x=s_drift["Drift (pp)"], y=s_drift["Sector"],
+                        orientation="h", marker_color=colours,
+                        text=s_drift["Drift (pp)"].map(lambda x: f"{x:+.1f}pp"),
+                        textposition="outside",
+                    ))
+                    fig_sd.add_vline(x=threshold,  line_dash="dash", line_color="#f59e0b", line_width=1.5)
+                    fig_sd.add_vline(x=-threshold, line_dash="dash", line_color="#f59e0b", line_width=1.5)
+                    fig_sd.add_vline(x=0, line_dash="solid", line_color=BORDER_COLOR, line_width=1)
+                    fig_sd.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font_color=TEXT_DARK,
+                        title="Sector Drift (pp) — dashed lines = threshold",
+                        title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                        xaxis_title="Drift (percentage points)",
+                        margin=dict(t=60, b=20, l=120, r=80), height=280,
+                    )
+                    st.plotly_chart(fig_sd, use_container_width=True)
+                    st.dataframe(s_drift, use_container_width=True, hide_index=True)
+
+            # Asset drift
+            if asset_targets_saved:
+                st.markdown("**Asset Drift**")
+                a_drift = _ta.compute_asset_drift(holdings_df, asset_targets_saved)
+                a_breached = _ta.get_breached(a_drift, threshold)
+
+                if not a_breached.empty:
+                    for _, br in a_breached.iterrows():
+                        direction = "▲ Overweight" if br["Drift (pp)"] > 0 else "▼ Underweight"
+                        badge_cls = "alert-card" if abs(br["Drift (pp)"]) < threshold * 2 else "alert-card-bad"
+                        st.markdown(
+                            f'<div class="{badge_cls}"><strong>{br["Asset"]}</strong> ({br["Sector"]}) — {direction} by <strong>{abs(br["Drift (pp)"]):.1f}pp</strong> '
+                            f'(Actual: {br["Actual %"]:.1f}% · Target: {br["Target %"]:.1f}%)</div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.markdown('<div class="alert-card-ok">✓ All assets within drift threshold</div>', unsafe_allow_html=True)
+
+                if not a_drift.empty:
+                    colours_a = ["#dc2626" if v > 0 else "#16a34a" for v in a_drift["Drift (pp)"]]
+                    fig_ad = go.Figure(go.Bar(
+                        x=a_drift["Drift (pp)"], y=a_drift["Asset"],
+                        orientation="h", marker_color=colours_a,
+                        text=a_drift["Drift (pp)"].map(lambda x: f"{x:+.1f}pp"),
+                        textposition="outside",
+                    ))
+                    fig_ad.add_vline(x=threshold,  line_dash="dash", line_color="#f59e0b", line_width=1.5)
+                    fig_ad.add_vline(x=-threshold, line_dash="dash", line_color="#f59e0b", line_width=1.5)
+                    fig_ad.add_vline(x=0, line_dash="solid", line_color=BORDER_COLOR, line_width=1)
+                    fig_ad.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font_color=TEXT_DARK,
+                        title="Asset Drift (pp)",
+                        title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                        xaxis_title="Drift (percentage points)",
+                        margin=dict(t=60, b=20, l=130, r=80),
+                        height=max(200, len(a_drift) * 32),
+                    )
+                    st.plotly_chart(fig_ad, use_container_width=True)
+                    st.dataframe(a_drift, use_container_width=True, hide_index=True)
+
+            # Record snapshot
+            if sector_targets_saved:
+                s_drift_snap = _ta.compute_sector_drift(holdings_df, sector_targets_saved)
+                a_drift_snap = _ta.compute_asset_drift(holdings_df, asset_targets_saved) if asset_targets_saved else pd.DataFrame()
+                config = _ta.record_drift_snapshot(config, s_drift_snap, a_drift_snap, total_mv)
+                _ta.save_config(config)
+
+            # Drift history chart
+            drift_hist = _ta.get_drift_history_df(config)
+            if not drift_hist.empty and len(drift_hist) >= 2:
+                st.markdown('<div class="section-title">Drift History</div>', unsafe_allow_html=True)
+                fig_dh = go.Figure()
+                fig_dh.add_trace(go.Scatter(
+                    x=drift_hist["date"], y=drift_hist["max_sector_drift"],
+                    mode="lines+markers", name="Max Sector Drift",
+                    line=dict(color=DARK_OLIVE, width=2),
+                ))
+                if "max_asset_drift" in drift_hist.columns:
+                    fig_dh.add_trace(go.Scatter(
+                        x=drift_hist["date"], y=drift_hist["max_asset_drift"],
+                        mode="lines+markers", name="Max Asset Drift",
+                        line=dict(color=ACCENT, width=2, dash="dash"),
+                    ))
+                fig_dh.add_hline(y=threshold, line_dash="dash", line_color="#f59e0b",
+                                 annotation_text=f"Threshold {threshold}pp", annotation_position="right")
+                fig_dh.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color=TEXT_DARK,
+                    title="Maximum Drift Over Time",
+                    title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                    yaxis_title="Drift (pp)", xaxis_title="Date",
+                    margin=dict(t=60, b=40, l=20, r=80),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig_dh, use_container_width=True)
+
+    # ── TAB 4: Trade Plan ──────────────────────────────────────────────────────
+    with tab4:
+        st.markdown('<div class="section-title">Target-Based Trade Suggestions</div>', unsafe_allow_html=True)
+        st.caption("These trades would bring your portfolio back to your target asset weights.")
+
+        asset_targets_saved = config.get("asset_targets", {})
+        if not asset_targets_saved:
+            st.info("Set asset targets in the Asset Targets tab first.")
+        else:
+            cash_col, _ = st.columns([1, 2])
+            with cash_col:
+                extra_cash = st.number_input(
+                    "Additional cash available to invest (KES)",
+                    min_value=0.0, value=0.0, step=1000.0,
+                    help="If you have fresh capital to deploy, enter it here. It will be included in the trade calculation.",
+                    format="%.2f",
+                )
+
+            trades_df = _ta.build_target_trades(holdings_df, asset_targets_saved, total_mv, extra_cash)
+
+            if trades_df.empty:
+                st.markdown('<div class="alert-card-ok">✓ Portfolio is already aligned to targets — no trades needed.</div>', unsafe_allow_html=True)
+            else:
+                # Summary
+                buys  = trades_df[trades_df["Action"] == "BUY"]
+                sells = trades_df[trades_df["Action"] == "SELL"]
+                t1, t2, t3 = st.columns(3)
+                with t1:
+                    st.markdown(kpi_card("Buy Orders",  str(len(buys)),  f"KES {buys['Est. Trade Value'].sum():,.0f} total"), unsafe_allow_html=True)
+                with t2:
+                    st.markdown(kpi_card("Sell Orders", str(len(sells)), f"KES {sells['Est. Trade Value'].sum():,.0f} total"), unsafe_allow_html=True)
+                with t3:
+                    net = buys["Est. Trade Value"].sum() - sells["Est. Trade Value"].sum()
+                    st.markdown(kpi_card("Net Capital Needed", f"KES {net:,.0f}", "Buys minus sell proceeds"), unsafe_allow_html=True)
+                st.markdown("")
+
+                # Colour-coded table
+                def _colour_trade(row):
+                    action = str(row.get("Action", "")).upper()
+                    if action == "BUY":  return ["background:#f0fdf4;color:#166534"] * len(row)
+                    if action == "SELL": return ["background:#fff1f2;color:#991b1b"] * len(row)
+                    return [""] * len(row)
+
+                display = trades_df.copy()
+                for col in ["Current Value", "Target Value", "Delta (KES)", "Price (KES)", "Est. Trade Value"]:
+                    if col in display.columns:
+                        display[col] = pd.to_numeric(display[col], errors="coerce").map(
+                            lambda x: f"KES {x:,.2f}" if pd.notna(x) else ""
+                        )
+                st.dataframe(
+                    display.style.apply(_colour_trade, axis=1),
+                    use_container_width=True, hide_index=True,
+                )
+
+                # Visual: buy/sell by asset
+                fig_tr = go.Figure()
+                fig_tr.add_trace(go.Bar(
+                    x=buys["Asset"], y=buys["Est. Trade Value"],
+                    name="BUY", marker_color="#16a34a",
+                    text=buys["Est. Trade Value"].map(lambda x: f"KES {x:,.0f}"),
+                    textposition="outside",
+                ))
+                fig_tr.add_trace(go.Bar(
+                    x=sells["Asset"], y=-sells["Est. Trade Value"],
+                    name="SELL", marker_color="#dc2626",
+                    text=sells["Est. Trade Value"].map(lambda x: f"KES {x:,.0f}"),
+                    textposition="outside",
+                ))
+                fig_tr.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color=TEXT_DARK,
+                    title="Required Trades to Restore Target Allocation",
+                    title_font=dict(family="Inter", size=14, color=DARK_OLIVE),
+                    barmode="relative",
+                    xaxis_title="Asset", yaxis_title="KES",
+                    margin=dict(t=70, b=60, l=20, r=20),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig_tr, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: CORPORATE ACTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "📋 Corporate Actions":
+    st.markdown('<div class="main-header">Corporate Actions</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Track stock splits, bonus issues, rights issues and consolidations — and see their impact on your holdings</p>', unsafe_allow_html=True)
+
+    if not HAS_CORP_ACTIONS:
+        st.error("corporate_actions.py not found. Place it in the same folder as streamlit_dashboard.py.")
+        st.stop()
+
+    holdings_df = sheets.get("holdings", pd.DataFrame())
+
+    # ── Tabs ───────────────────────────────────────────────────────────────────
+    tab_log, tab_add, tab_ref = st.tabs(["📋 Action Log", "➕ Record New Action", "📚 NSE Reference"])
+
+    # ── TAB 1: Action Log ──────────────────────────────────────────────────────
+    with tab_log:
+        st.markdown('<div class="section-title">Recorded Corporate Actions</div>', unsafe_allow_html=True)
+        actions = _ca.load_actions()
+
+        if not actions:
+            st.info("No corporate actions recorded yet. Use the 'Record New Action' tab to add one.")
+        else:
+            tbl = _ca.build_actions_table(actions)
+            display_tbl = tbl.drop(columns=["_id"], errors="ignore")
+            st.dataframe(display_tbl, use_container_width=True, hide_index=True)
+
+            st.markdown('<div class="section-title">Impact Preview</div>', unsafe_allow_html=True)
+            st.caption("Select an action below to see how it would affect your current holdings.")
+
+            action_labels = [f"{a.get('effective_date','')} · {a.get('asset','')} · {a.get('action_type','')}" for a in actions]
+            selected_label = st.selectbox("Select action to preview:", action_labels, key="preview_select")
+            selected_idx   = action_labels.index(selected_label) if selected_label in action_labels else 0
+            selected_action = actions[selected_idx]
+
+            if not holdings_df.empty:
+                preview_df = _ca.preview_action_impact(selected_action, holdings_df)
+                if not preview_df.empty:
+                    def colour_change(val):
+                        if str(val).startswith("+"):  return "color:#16a34a;font-weight:600"
+                        if str(val).startswith("-"):  return "color:#dc2626;font-weight:600"
+                        return ""
+                    st.dataframe(
+                        preview_df.style.map(colour_change, subset=["Change"]),
+                        use_container_width=True, hide_index=True,
+                    )
+            else:
+                st.warning("Load a portfolio file to see the impact on your holdings.")
+
+            # Delete action
+            st.markdown('<div class="section-title">Delete Action</div>', unsafe_allow_html=True)
+            del_label = st.selectbox("Select action to delete:", action_labels, key="del_select")
+            if st.button("🗑️ Delete Selected Action", type="secondary"):
+                del_idx    = action_labels.index(del_label)
+                del_id     = actions[del_idx].get("id", "")
+                if _ca.delete_action(del_id):
+                    st.success("Action deleted.")
+                    st.rerun()
+                else:
+                    st.error("Could not delete action.")
+
+    # ── TAB 2: Record New Action ───────────────────────────────────────────────
+    with tab_add:
+        st.markdown('<div class="section-title">Record a New Corporate Action</div>', unsafe_allow_html=True)
+
+        # Get asset list from holdings or fallback to NSE list
+        asset_options = sorted(holdings_df["Asset"].dropna().unique().tolist()) if not holdings_df.empty and "Asset" in holdings_df.columns else _ca.NSE_ASSETS
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            new_asset  = st.selectbox("Asset", asset_options, key="ca_asset")
+            new_type   = st.selectbox("Action Type", list(_ca.ACTION_TYPES.keys()),
+                                      format_func=lambda x: f"{x} — {_ca.ACTION_TYPES[x][:45]}...",
+                                      key="ca_type")
+            new_date   = st.date_input("Effective Date", value=pd.Timestamp.today(), key="ca_date")
+        with col_b:
+            st.markdown("**Ratio**")
+            st.caption("e.g. for a 2-for-1 split: FROM=1, TO=2. For 1-for-5 bonus: FROM=5, TO=1")
+            ratio_from = st.number_input("Ratio FROM (shares held)", min_value=0.01, value=1.0, step=0.5, key="ca_rf")
+            ratio_to   = st.number_input("Ratio TO (shares received)", min_value=0.01, value=2.0, step=0.5, key="ca_rt")
+            sub_price  = None
+            if new_type == "RIGHTS":
+                sub_price = st.number_input("Subscription Price (KES per new share)", min_value=0.0, value=0.0, step=0.5, key="ca_sub")
+
+        new_notes = st.text_area("Notes (optional)", key="ca_notes", height=80)
+
+        # Live preview
+        if not holdings_df.empty:
+            preview_action = {
+                "asset": new_asset, "action_type": new_type,
+                "effective_date": str(new_date),
+                "ratio_from": ratio_from, "ratio_to": ratio_to,
+                "subscription_price": sub_price,
+            }
+            st.markdown('<div class="section-title">Live Impact Preview</div>', unsafe_allow_html=True)
+            prev = _ca.preview_action_impact(preview_action, holdings_df)
+            if not prev.empty:
+                def colour_change2(val):
+                    if str(val).startswith("+"): return "color:#16a34a;font-weight:600"
+                    if str(val).startswith("-"): return "color:#dc2626;font-weight:600"
+                    return ""
+                st.dataframe(
+                    prev.style.map(colour_change2, subset=["Change"]),
+                    use_container_width=True, hide_index=True,
+                )
+
+        if st.button("💾 Save Corporate Action", type="primary", key="ca_save"):
+            _ca.add_action(
+                asset=new_asset,
+                action_type=new_type,
+                effective_date=str(new_date),
+                ratio_from=ratio_from,
+                ratio_to=ratio_to,
+                subscription_price=sub_price if sub_price else None,
+                notes=new_notes,
+            )
+            st.success(f"✓ {new_type} recorded for {new_asset} on {new_date}.")
+            st.info(
+                "⚠️ **Important:** Recording an action here logs it for reference and shows its impact. "
+                "To actually update your Excel holdings file, open it and manually adjust the Shares and Buy Price "
+                "for this asset based on the preview above, then re-run update_portfolio.py."
+            )
+            st.rerun()
+
+    # ── TAB 3: NSE Reference ──────────────────────────────────────────────────
+    with tab_ref:
+        st.markdown('<div class="section-title">Known NSE Corporate Actions (Reference)</div>', unsafe_allow_html=True)
+        st.caption("Historical corporate actions for NSE-listed stocks. For reference only — these are not applied to your portfolio automatically.")
+
+        ref_rows = []
+        for a in _ca.KNOWN_NSE_ACTIONS:
+            ref_rows.append({
+                "Asset"      : a["asset"],
+                "Type"       : a["action_type"],
+                "Date"       : a["effective_date"],
+                "Ratio"      : f"{a['ratio_to']}-for-{a['ratio_from']}",
+                "Sub. Price" : f"KES {a['subscription_price']}" if a.get("subscription_price") else "—",
+                "Notes"      : a.get("notes", ""),
+            })
+        ref_df = pd.DataFrame(ref_rows)
+        st.dataframe(ref_df, use_container_width=True, hide_index=True)
+
+        st.markdown("")
+        st.markdown('<div class="section-title">Action Type Reference Guide</div>', unsafe_allow_html=True)
+        for atype, desc in _ca.ACTION_TYPES.items():
+            st.markdown(f"**{atype}** — {desc}")
+
+        st.markdown("")
+        with st.expander("📖 How corporate actions affect your cost basis"):
+            st.markdown("""
+| Action | Shares | Buy Price per Share | Total Cost Basis |
+|--------|--------|---------------------|-----------------|
+| **Split (2-for-1)** | ×2 | ÷2 | Unchanged |
+| **Reverse Split (1-for-10)** | ÷10 | ×10 | Unchanged |
+| **Bonus (1-for-5)** | +20% | ÷1.2 | Unchanged |
+| **Rights Issue** | +new shares | Weighted average | +subscription cost |
+
+**Key rule:** The total cost basis of your position never changes from a split or bonus —
+only the per-share price adjusts. Rights issues increase your cost basis because you pay
+new cash to acquire the additional shares.
+            """)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: TRANSACTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🔄 Transactions":
-    st.markdown('<div class="main-header">🔄 Transaction History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Transaction History</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Full log of all buys, sells and opening positions</p>', unsafe_allow_html=True)
 
     tx_df = sheets.get("tx", pd.DataFrame())
 
@@ -928,7 +2473,8 @@ elif page == "🔄 Transactions":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🎛️ Risk Settings":
-    st.markdown('<div class="main-header">🎛️ Risk Settings</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Risk Settings</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Customise risk parameters and see live diversification score</p>', unsafe_allow_html=True)
 
     st.markdown(
         "Adjust the risk parameters below. The **Diversification Score** updates live "
@@ -1191,7 +2737,8 @@ elif page == "📧 Reports & Email":
     from email.mime.base import MIMEBase
     from email import encoders as _encoders
 
-    st.markdown('<div class="main-header">📧 Reports & Email</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Reports & Email</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Send PDF portfolio reports directly from the dashboard</p>', unsafe_allow_html=True)
 
     # ── Helper: read .env file into a dict ────────────────────────────────────
     def read_env_file(path=".env"):
@@ -1425,10 +2972,22 @@ elif page == "📧 Reports & Email":
 
 # ─── Footer ─────────────────────────────────────────────────────────────────
 st.markdown("---")
-st.markdown(
-    f'<div style="text-align:center; color:{ACCENT}; font-size:0.8rem; font-family:Source Sans 3, sans-serif;">'
-    f"NSE Portfolio Tracker · Data sourced from your Python script's output · "
-    f"Prices from mansamarkets.com"
-    f"</div>",
-    unsafe_allow_html=True,
-)
+footer_cols = st.columns([1, 2, 1])
+with footer_cols[1]:
+    if _logo_b64:
+        st.markdown(
+            f'''<div style="text-align:center;margin-bottom:0.4rem;">
+            <img src="data:image/png;base64,{_logo_b64}"
+                 style="max-width:140px;opacity:0.5;background:#1a1a1a;
+                        padding:0.5rem;border-radius:8px;" />
+            </div>''',
+            unsafe_allow_html=True,
+        )
+    st.markdown(
+        f'<div style="text-align:center;color:{ACCENT};font-size:0.75rem;font-family:Inter,sans-serif;line-height:1.6;">'
+        f"PRO_LAW Portfolio Tracking System · NSE Kenya · "
+        f"Prices from mansamarkets.com<br>"
+        f"For informational purposes only — not financial advice."
+        f"</div>",
+        unsafe_allow_html=True,
+    )
