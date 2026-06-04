@@ -1,0 +1,22 @@
+{
+  "manual_rates": {},
+  "asset_currencies": {
+    "Britam": "KES",
+    "CIC": "KES",
+    "Co-op Bank": "KES",
+    "Equity": "KES",
+    "Jubilee": "KES",
+    "KCB": "KES",
+    "KenGen": "KES",
+    "Kenya Power": "KES",
+    "Money Market Fund": "KES",
+    "NCBA": "KES",
+    "Safaricom": "KES",
+    "Total Energies Marketing": "KES",
+    "Treasury Bonds": "KES",
+    "VOO / IVV": "KES",
+    "VT": "KES"
+  },
+  "use_live_rates": true,
+  "custom_currencies": {}
+}

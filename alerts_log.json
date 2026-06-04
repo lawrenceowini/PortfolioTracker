@@ -1,0 +1,32 @@
+[
+  {
+    "id": "conc_asset_Treasury Bonds",
+    "type": "CONCENTRATION",
+    "severity": "CRITICAL",
+    "asset": "Treasury Bonds",
+    "message": "Treasury Bonds is 23.1% of portfolio \u2014 exceeds 10% asset limit by 13.1pp",
+    "value": 23.08,
+    "threshold": 10.0,
+    "logged_at": "2026-06-04 08:12:08"
+  },
+  {
+    "id": "conc_sector_Fixed Income",
+    "type": "CONCENTRATION",
+    "severity": "WARNING",
+    "asset": "Fixed Income",
+    "message": "Fixed Income sector is 23.1% of portfolio \u2014 exceeds 20% sector limit by 3.1pp",
+    "value": 23.08,
+    "threshold": 20.0,
+    "logged_at": "2026-06-04 08:12:08"
+  },
+  {
+    "id": "conc_asset_Money Market Fund",
+    "type": "CONCENTRATION",
+    "severity": "WARNING",
+    "asset": "Money Market Fund",
+    "message": "Money Market Fund is 13.9% of portfolio \u2014 exceeds 10% asset limit by 3.9pp",
+    "value": 13.86,
+    "threshold": 10.0,
+    "logged_at": "2026-06-04 23:25:47"
+  }
+]

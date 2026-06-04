@@ -88,16 +88,6 @@
       "breached_assets": []
     },
     {
-      "date": "2026-06-03 09:49",
-      "total_value": 14546263.5,
-      "max_sector_drift": 5.52,
-      "max_asset_drift": 0,
-      "breached_sectors": [
-        "Cash"
-      ],
-      "breached_assets": []
-    },
-    {
       "date": "2026-06-03 09:50",
       "total_value": 14546263.5,
       "max_sector_drift": 5.52,
@@ -926,6 +916,18 @@
       "max_asset_drift": 1.16,
       "breached_sectors": [],
       "breached_assets": []
+    },
+    {
+      "date": "2026-06-04 08:11",
+      "total_value": 26211339.6,
+      "max_sector_drift": 7.47,
+      "max_asset_drift": 7.37,
+      "breached_sectors": [
+        "Cash"
+      ],
+      "breached_assets": [
+        "Money Market Fund"
+      ]
     }
   ]
 }

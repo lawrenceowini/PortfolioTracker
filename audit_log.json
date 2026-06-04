@@ -1,0 +1,289 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2026-06-04 13:06:11",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.9,
+      "file_hash": "0d1f2d68e3db412e",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "13c2e8ad2a420a37d486a97ad7cb856262f34b69f98c53836cd40e4c7f3038d7"
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-06-04 13:06:11",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "0dfaae65efbaa2cdfd8d2f47f76caf0576a1f879c540011fefe36e8815fb3cca"
+  },
+  {
+    "id": 3,
+    "timestamp": "2026-06-04 13:11:48",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "06d09dc87ff8bf4bced79f519b52ad4f830c0799869e5b5f565e1c3fb93a1439"
+  },
+  {
+    "id": 4,
+    "timestamp": "2026-06-04 13:11:48",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "77a75432277d19ddb4e2acb24a4125430aff9ab732261cebdbe7f945f9447d52"
+  },
+  {
+    "id": 5,
+    "timestamp": "2026-06-04 13:12:44",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "298174b1b6225597038bef302d39afa9f4363a92bafb9970689af064af2ca6ef"
+  },
+  {
+    "id": 6,
+    "timestamp": "2026-06-04 13:12:44",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "98cac7d7ab4d82eb949fe35ee53ac8d1fcbd6b1dd97fa7417886243a892af0ce"
+  },
+  {
+    "id": 7,
+    "timestamp": "2026-06-04 13:12:55",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.9,
+      "file_hash": "0d1f2d68e3db412e",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "67eae6baa355179965ff609412defbd91bef0231ef61952baa74e0d6348f1bb1"
+  },
+  {
+    "id": 8,
+    "timestamp": "2026-06-04 13:20:01",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "51a050b47db782a10c50a050b4f285f5f1a7a2df4c168c1c78d2267684766516"
+  },
+  {
+    "id": 9,
+    "timestamp": "2026-06-04 13:20:01",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "88595f0b9db5f273beffb48f44ad068661ab66f615dc3d1c3976c18ab7e8658f"
+  },
+  {
+    "id": 10,
+    "timestamp": "2026-06-04 13:28:15",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "49cebcd6ac2b4fe6e74555b3e263b868620d04188cd9fc66c0f1c3038bfbc92f"
+  },
+  {
+    "id": 11,
+    "timestamp": "2026-06-04 13:28:15",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "4e531bec5792249170fce398784b706b53c8066ab8bb8a837f8bbfcd64183fcb"
+  },
+  {
+    "id": 12,
+    "timestamp": "2026-06-04 23:03:57",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.9,
+      "file_hash": "0d1f2d68e3db412e",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "3009adbd3d8670cd7e0c8431fd8b5b6f2d33f0880d1f15228c369ec680e7861e"
+  },
+  {
+    "id": 13,
+    "timestamp": "2026-06-04 23:03:57",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "cfc1c0dd9df6adced0cc1fa08e258b36b6a76c43cd2316cdd64e0202c9376488"
+  },
+  {
+    "id": 14,
+    "timestamp": "2026-06-04 23:04:33",
+    "event_type": "REPORT_GENERATED",
+    "description": "PDF report generated",
+    "details": {
+      "file": "Client_Portfolio_Template_Report.pdf",
+      "portfolio": "Client Portfolio Template",
+      "password_protected": true
+    },
+    "user_note": "",
+    "entry_hash": "1ee15294dd9672532732a643933087a9f6208bfe816461cef047ed9baac5b79b"
+  },
+  {
+    "id": 15,
+    "timestamp": "2026-06-04 23:06:53",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Lawrence_Client1_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\Lawrence_Client1_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.7,
+      "file_hash": "d943ab68164b0a30",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "0edde027fb7c2ce0d44140ea947e093f790eb8fc8df309bc2177dc4dca82620b"
+  },
+  {
+    "id": 16,
+    "timestamp": "2026-06-04 23:07:59",
+    "event_type": "REPORT_GENERATED",
+    "description": "PDF report generated",
+    "details": {
+      "file": "Lawrence_Report.pdf",
+      "portfolio": "Lawrence",
+      "password_protected": true
+    },
+    "user_note": "",
+    "entry_hash": "0330f39b9ddf7397ec45760c02f03d04191de2a7a03c2127b148407cb0158400"
+  },
+  {
+    "id": 17,
+    "timestamp": "2026-06-04 23:08:45",
+    "event_type": "EMAIL_SENT",
+    "description": "Report emailed to recipient",
+    "details": {
+      "recipient": "bl687887@gmail.com",
+      "file": "Lawrence_Report.pdf",
+      "success": true
+    },
+    "user_note": "",
+    "entry_hash": "2e8fd38275da17f0227cec5c3ef6870f2ee5b5087588e4e3c01d563d4a5d3359"
+  }
+]
