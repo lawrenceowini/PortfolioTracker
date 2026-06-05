@@ -528,35 +528,49 @@ def generate_professional_report(
                                 color=DARK_OLIVE, spaceAfter=8*mm))
 
         # Cover KPIs
+        _tv_str  = _kes(summary["total_val"]) if summary["total_val"] > 0 else "Template / No data"
+        _gl_str  = _kes(summary["gain_loss"]) if summary["total_val"] > 0 else "—"
+        _div_str = _kes(summary["total_div"]) if summary["total_div"] > 0 else "—"
+        _ast_str = str(summary["num_assets"]) if summary["num_assets"] > 0 else "0 (template)"
+        _sec_str = str(summary["num_sectors"]) if summary["num_sectors"] > 0 else "0 (template)"
+
         story.append(_kpi_row([
-            ("Total Portfolio Value",    _kes(summary["total_val"])),
-            ("Holdings",                 str(summary["num_assets"])),
-            ("Sectors",                  str(summary["num_sectors"])),
-            ("Total Gain / Loss",        _kes(summary["gain_loss"])),
+            ("Total Portfolio Value", _tv_str),
+            ("Holdings",              _ast_str),
+            ("Sectors",               _sec_str),
+            ("Total Gain / Loss",     _gl_str),
         ], styles))
         story.append(Spacer(1, 6 * mm))
 
         story.append(_kpi_row([
-            ("Largest Position",  summary["largest_asset"]),
-            ("Annual Dividends",  _kes(summary["total_div"])),
-            ("Report Date",       datetime.datetime.now().strftime("%d %b %Y")),
-            ("Prepared by",       "PRO_LAW System"),
+            ("Largest Position", summary["largest_asset"]),
+            ("Annual Dividends", _div_str),
+            ("Report Date",      datetime.datetime.now().strftime("%d %b %Y")),
+            ("Prepared by",      "PRO_LAW System"),
         ], styles))
         story.append(Spacer(1, 10 * mm))
 
         # Executive summary text
-        gl_word = "gain" if summary["gain_loss"] >= 0 else "loss"
-        exec_text = (
-            f"This report provides a comprehensive overview of <b>{portfolio_name}</b> as at "
-            f"{datetime.datetime.now().strftime('%d %B %Y')}. "
-            f"The portfolio holds <b>{summary['num_assets']} assets</b> across "
-            f"<b>{summary['num_sectors']} sectors</b>, with a total market value of "
-            f"<b>{_kes(summary['total_val'])}</b>. "
-            f"The portfolio has recorded a net unrealised {gl_word} of "
-            f"<b>{_kes(abs(summary['gain_loss']))}</b> on current positions. "
-            f"Annual dividend income amounts to <b>{_kes(summary['total_div'])}</b>. "
-            f"The largest single position is <b>{summary['largest_asset']}</b>."
-        )
+        if summary["total_val"] > 0:
+            gl_word   = "gain" if summary["gain_loss"] >= 0 else "loss"
+            exec_text = (
+                f"This report provides a comprehensive overview of <b>{portfolio_name}</b> as at "
+                f"{datetime.datetime.now().strftime('%d %B %Y')}. "
+                f"The portfolio holds <b>{summary['num_assets']} assets</b> across "
+                f"<b>{summary['num_sectors']} sectors</b>, with a total market value of "
+                f"<b>{_kes(summary['total_val'])}</b>. "
+                f"The portfolio has recorded a net unrealised {gl_word} of "
+                f"<b>{_kes(abs(summary['gain_loss']))}</b> on current positions. "
+                f"Annual dividend income amounts to <b>{_kes(summary['total_div'])}</b>. "
+                f"The largest single position is <b>{summary['largest_asset']}</b>."
+            )
+        else:
+            exec_text = (
+                f"This document is a <b>portfolio report template</b> for <b>{portfolio_name}</b>, "
+                f"generated on {datetime.datetime.now().strftime('%d %B %Y')}. "
+                f"No portfolio data has been entered yet. Fill in the Excel template with your holdings "
+                f"and run <b>update_portfolio.py</b> to generate a populated report."
+            )
         story.append(Paragraph(exec_text, styles["body"]))
         story.append(Spacer(1, 6 * mm))
 
@@ -608,11 +622,14 @@ def generate_professional_report(
             }
             h_display.columns = [short_headers.get(c, c) for c in h_display.columns]
 
-            tbl_data = [list(h_display.columns)] + h_display.values.tolist()
-            col_w    = CONTENT_W / len(h_display.columns)
-            tbl      = Table(tbl_data, colWidths=[col_w] * len(h_display.columns), repeatRows=1)
-            tbl.setStyle(_table_style(len(tbl_data)))
-            story.append(tbl)
+            if not h_display.empty and len(h_display.columns) > 0:
+                tbl_data = [list(h_display.columns)] + h_display.fillna("").values.tolist()
+                col_w    = CONTENT_W / len(h_display.columns)
+                tbl      = Table(tbl_data, colWidths=[col_w] * len(h_display.columns), repeatRows=1)
+                tbl.setStyle(_table_style(len(tbl_data)))
+                story.append(tbl)
+            else:
+                story.append(Paragraph("Holdings table is empty — no positions recorded yet.", styles["body"]))
         else:
             story.append(Paragraph("No holdings data available.", styles["body"]))
 
@@ -635,31 +652,34 @@ def generate_professional_report(
                 sector_df = sector_df.sort_values("Allocation %", ascending=False)
 
                 # Side-by-side: table + pie
-                tbl_data = [["Sector", "Market Value", "Allocation %"]]
-                for _, row in sector_df.iterrows():
-                    tbl_data.append([
-                        str(row["Sector"]),
-                        _kes(row["Market Value (KES)"]),
-                        _pct(row["Allocation %"]),
-                    ])
+                if not sector_df.empty and sector_df["Market Value (KES)"].sum() > 0:
+                    tbl_data = [["Sector", "Market Value", "Allocation %"]]
+                    for _, row in sector_df.iterrows():
+                        tbl_data.append([
+                            str(row["Sector"]),
+                            _kes(row["Market Value (KES)"]),
+                            _pct(row["Allocation %"]),
+                        ])
 
-                sec_tbl = Table(tbl_data, colWidths=[70*mm, 55*mm, 35*mm], repeatRows=1)
-                sec_tbl.setStyle(_table_style(len(tbl_data)))
+                    sec_tbl = Table(tbl_data, colWidths=[70*mm, 55*mm, 35*mm], repeatRows=1)
+                    sec_tbl.setStyle(_table_style(len(tbl_data)))
 
-                pie = _pie_chart(
-                    labels=sector_df["Sector"].tolist(),
-                    values=sector_df["Allocation %"].tolist(),
-                    title="Sector Allocation",
-                    width=130, height=110,
-                )
+                    pie = _pie_chart(
+                        labels=sector_df["Sector"].tolist(),
+                        values=sector_df["Allocation %"].tolist(),
+                        title="Sector Allocation",
+                        width=130, height=110,
+                    )
 
-                layout = Table([[sec_tbl, pie]], colWidths=[CONTENT_W * 0.58, CONTENT_W * 0.42])
-                layout.setStyle(TableStyle([
-                    ("VALIGN", (0,0), (-1,-1), "TOP"),
-                    ("LEFTPADDING", (0,0), (-1,-1), 0),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                ]))
-                story.append(layout)
+                    layout = Table([[sec_tbl, pie]], colWidths=[CONTENT_W * 0.58, CONTENT_W * 0.42])
+                    layout.setStyle(TableStyle([
+                        ("VALIGN", (0,0), (-1,-1), "TOP"),
+                        ("LEFTPADDING", (0,0), (-1,-1), 0),
+                        ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ]))
+                    story.append(layout)
+                else:
+                    story.append(Paragraph("No sector data available — add holdings to populate this section.", styles["body"]))
 
         story.append(PageBreak())
 
@@ -742,22 +762,26 @@ def generate_professional_report(
                 return []
 
             risk_data = _extract_sub_table(dash_df, "Metric")
-            if risk_data:
+            if risk_data and len(risk_data) > 1 and len(risk_data[0]) > 0:
                 story.append(Paragraph("Risk Summary", styles["sub_heading"]))
                 col_w = CONTENT_W / max(len(risk_data[0]), 1)
                 rtbl  = Table(risk_data, colWidths=[col_w] * len(risk_data[0]), repeatRows=1)
                 rtbl.setStyle(_table_style(len(risk_data)))
                 story.append(rtbl)
                 story.append(Spacer(1, 4*mm))
+            else:
+                story.append(Paragraph("Risk data not available — run update_portfolio.py to populate.", styles["body"]))
 
             # Rebalance suggestions
             reb_data = _extract_sub_table(dash_df, "Estimated Value")
-            if reb_data:
+            if reb_data and len(reb_data) > 1 and len(reb_data[0]) > 0:
                 story.append(Paragraph("Rebalancing Suggestions", styles["sub_heading"]))
                 col_w = CONTENT_W / max(len(reb_data[0]), 1)
                 rtbl2 = Table(reb_data, colWidths=[col_w] * len(reb_data[0]), repeatRows=1)
                 rtbl2.setStyle(_table_style(len(reb_data)))
                 story.append(rtbl2)
+            else:
+                story.append(Paragraph("No rebalancing suggestions — portfolio may already be balanced or no data yet.", styles["body"]))
         else:
             story.append(Paragraph("No risk data found.", styles["body"]))
 
@@ -788,13 +812,16 @@ def generate_professional_report(
 
             # Per-asset table
             disp_cols = [c for c in div_df.columns if c.strip().lower() not in ("metric","value") and not div_df[c].isna().all()]
-            if disp_cols:
+            if disp_cols and len(disp_cols) > 0:
                 div_display = div_df[disp_cols].head(20).copy()
-                tbl_data    = [list(div_display.columns)] + div_display.fillna("").values.tolist()
-                col_w       = CONTENT_W / len(div_display.columns)
-                dtbl        = Table(tbl_data, colWidths=[col_w] * len(div_display.columns), repeatRows=1)
-                dtbl.setStyle(_table_style(len(tbl_data)))
-                story.append(dtbl)
+                if not div_display.empty and len(div_display.columns) > 0:
+                    tbl_data = [list(div_display.columns)] + div_display.fillna("").values.tolist()
+                    col_w    = CONTENT_W / len(div_display.columns)
+                    dtbl     = Table(tbl_data, colWidths=[col_w] * len(div_display.columns), repeatRows=1)
+                    dtbl.setStyle(_table_style(len(tbl_data)))
+                    story.append(dtbl)
+                else:
+                    story.append(Paragraph("No dividend entries recorded yet.", styles["body"]))
         else:
             story.append(Paragraph("No dividend data found. Ensure your input Excel has a Dividend Tracking sheet.", styles["body"]))
 
@@ -806,14 +833,14 @@ def generate_professional_report(
         story.append(Paragraph("6. NSE Live Prices", styles["section_heading"]))
 
         nse_df = summary["nse"]
-        if not nse_df.empty:
+        if not nse_df.empty and len(nse_df.columns) > 0:
             tbl_data = [list(nse_df.columns)] + nse_df.fillna("").values.tolist()
             col_w    = CONTENT_W / len(nse_df.columns)
             ntbl     = Table(tbl_data, colWidths=[col_w] * len(nse_df.columns), repeatRows=1)
             ntbl.setStyle(_table_style(len(tbl_data)))
             story.append(ntbl)
         else:
-            story.append(Paragraph("No NSE price data found.", styles["body"]))
+            story.append(Paragraph("No NSE price data found. Run update_portfolio.py to populate this section.", styles["body"]))
 
         story.append(Spacer(1, 6*mm))
         story.append(HRFlowable(width=CONTENT_W, thickness=0.5, color=BORDER_COLOR))

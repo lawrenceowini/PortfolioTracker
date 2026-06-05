@@ -35,9 +35,9 @@ ALERT_TYPES = {
 }
 
 SEVERITY = {
-    "INFO"    : ("ℹ️", "#2563eb", "#eff6ff"),
-    "WARNING" : ("⚠️", "#d97706", "#fffbeb"),
-    "CRITICAL": ("🚨", "#dc2626", "#fef2f2"),
+    "INFO"    : ("#2563eb", "#eff6ff"),
+    "WARNING" : ("#d97706", "#fffbeb"),
+    "CRITICAL": ("#dc2626", "#fef2f2"),
 }
 
 
@@ -360,7 +360,7 @@ def alerts_to_df(alerts: list) -> pd.DataFrame:
         return pd.DataFrame()
     rows = []
     for a in alerts:
-        icon, _, _ = SEVERITY.get(a.get("severity", "INFO"), ("ℹ️", "", ""))
+        icon, _, _ = SEVERITY.get(a.get("severity", "INFO"), ("", ""))
         rows.append({
             "Severity": f"{icon} {a.get('severity', 'INFO')}",
             "Type"    : a.get("type", ""),

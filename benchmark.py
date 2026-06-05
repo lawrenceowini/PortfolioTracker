@@ -299,9 +299,9 @@ def build_comparison_table(
         }
 
     rows = [
-        summarise(portfolio_ret, "📊 Your Portfolio"),
-        summarise(nse20_ret,     f"📉 {NSE20_NAME}"),
-        summarise(nasi_ret,      f"📉 {NASI_NAME}"),
+        summarise(portfolio_ret, "Your Portfolio"),
+        summarise(nse20_ret,     f"{NSE20_NAME}"),
+        summarise(nasi_ret,      f"{NASI_NAME}"),
     ]
     return pd.DataFrame(rows)
 

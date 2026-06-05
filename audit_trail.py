@@ -140,7 +140,7 @@ def verify_chain() -> tuple:
             )
         prev_hash = stored_hash
 
-    return True, None, f"✅ All {len(log)} entries verified — log is intact."
+    return True, None, f" All {len(log)} entries verified — log is intact."
 
 
 # ── Change detection ──────────────────────────────────────────────────────────
