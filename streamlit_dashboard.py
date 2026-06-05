@@ -114,7 +114,7 @@ DARK_OLIVE   = "#3B4436"
 CREAM        = "#F1E9CB"
 TEXT_DARK    = "#2F332E"
 WARM_BEIGE   = "#E6DFD3"
-WARM_WHITE   = "#FDFBF7"
+WARM_WHITE   = "#ECEAE4"
 SOFT_BEIGE   = "#EAECE6"
 BORDER_COLOR = "#B8AA91"
 ACCENT       = "#7A8C6E"
@@ -125,9 +125,11 @@ st.markdown(f"""
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
   /* ── Global ── */
-  html, body, [class*="css"] {{
+  html, body, [class*="css"], .stApp,
+  [data-testid="stAppViewContainer"],
+  [data-testid="stMainBlockContainer"] {{
       font-family: 'Inter', sans-serif;
-      background-color: {WARM_WHITE};
+      background-color: #ECEAE4 !important;
       color: {TEXT_DARK};
   }}
   .block-container {{ padding-top: 2.8rem; padding-bottom: 2rem; }}
@@ -141,6 +143,13 @@ st.markdown(f"""
       color: {CREAM} !important;
   }}
   /* Dark mode: keep header olive */
+  /* Dark mode via JS class (reliable in Streamlit) */
+  body.pro-dark [data-testid="stAppViewContainer"],
+  body.pro-dark [data-testid="stMainBlockContainer"],
+  html.pro-dark .stApp {{
+      background-color: #1a1f1b !important;
+  }}
+
   @media (prefers-color-scheme: dark) {{
       header[data-testid="stHeader"] {{
           background: {DARK_OLIVE} !important;
@@ -194,7 +203,7 @@ st.markdown(f"""
   }}
   .page-subtitle {{
       font-size: 0.85rem;
-      color: {ACCENT};
+      color: #4d5e40;
       margin-bottom: 1.6rem;
       font-weight: 400;
   }}
@@ -205,14 +214,14 @@ st.markdown(f"""
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: {ACCENT};
+      color: #4a5a3a;
       margin-top: 2rem;
       margin-bottom: 0.8rem;
   }}
 
   /* ── KPI cards (Insightfolio-style) ── */
   .kpi-card {{
-      background: #ffffff;
+      background: #F7F5F0;
       border: 1px solid {BORDER_COLOR};
       border-radius: 12px;
       padding: 1.25rem 1.4rem;
@@ -226,7 +235,7 @@ st.markdown(f"""
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: {ACCENT};
+      color: #4a5a3a;
       margin-bottom: 0.5rem;
   }}
   .kpi-value {{
@@ -239,7 +248,7 @@ st.markdown(f"""
   }}
   .kpi-sub {{
       font-size: 0.75rem;
-      color: {ACCENT};
+      color: #556650;
       margin-top: 0.35rem;
       font-weight: 400;
   }}
@@ -289,11 +298,11 @@ st.markdown(f"""
       font-size:0.84rem;
   }}
   .drift-label {{ flex:1; font-weight:500; color:{TEXT_DARK}; }}
-  .drift-actual {{ width:60px; text-align:right; color:{ACCENT}; font-size:0.8rem; }}
-  .drift-target {{ width:60px; text-align:right; color:{ACCENT}; font-size:0.8rem; }}
+  .drift-actual {{ width:60px; text-align:right; color:#4a5a3a; font-size:0.8rem; }}
+  .drift-target {{ width:60px; text-align:right; color:#4a5a3a; font-size:0.8rem; }}
   .drift-pp-up   {{ width:70px; text-align:right; color:#dc2626; font-weight:700; }}
   .drift-pp-down {{ width:70px; text-align:right; color:#16a34a; font-weight:700; }}
-  .drift-pp-zero {{ width:70px; text-align:right; color:{ACCENT}; font-weight:600; }}
+  .drift-pp-zero {{ width:70px; text-align:right; color:#4a5a3a; font-weight:600; }}
 
   /* ── Table styling ── */
   .stDataFrame {{ border: 1px solid {BORDER_COLOR}; border-radius: 10px; overflow: hidden; }}
@@ -382,7 +391,7 @@ st.markdown(f"""
       background-size: contain;
       background-repeat: no-repeat;
       background-position: center center;
-      opacity: 0.07;
+      opacity: 0.13;
       pointer-events: none;
       z-index: 0;
   }}
@@ -402,11 +411,11 @@ st.markdown(f"""
       }}
 
       /* ── Main background ── */
-      .main {{
+      html, body, .stApp,
+      [data-testid="stAppViewContainer"],
+      [data-testid="stMainBlockContainer"],
+      .main, .block-container {{
           background-color: #1a1f1b !important;
-      }}
-      .block-container {{
-          background-color: transparent !important;
       }}
 
       /* ── KPI cards ── */
@@ -546,6 +555,28 @@ st.markdown(f"""
 
 </style>
 """, unsafe_allow_html=True)
+
+# ── JS: detect system dark mode and toggle .dark-mode class on body ────────────
+st.markdown('''
+<script>
+(function() {
+    function applyTheme() {
+        var isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (isDark) {
+            document.body.classList.add("pro-dark");
+            document.documentElement.classList.add("pro-dark");
+        } else {
+            document.body.classList.remove("pro-dark");
+            document.documentElement.classList.remove("pro-dark");
+        }
+    }
+    applyTheme();
+    if (window.matchMedia) {
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+    }
+})();
+</script>
+''', unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -836,7 +867,7 @@ if source_mode == "⬆️ Upload file":
         st.markdown(
             f'''<div style="text-align:center;margin-top:2rem;margin-bottom:1.5rem;">
             <img src="data:image/png;base64,{_logo_b64}"
-                 style="max-width:240px;background:#1a1a1a;padding:1rem;border-radius:12px;" />
+                 style="max-width:240px;" />
             </div>''',
             unsafe_allow_html=True,
         )
@@ -953,8 +984,7 @@ if not sheets:
             st.markdown(
                 f'''<div style="text-align:center;margin-top:4rem;">
                 <img src="data:image/png;base64,{_logo_b64}"
-                     style="max-width:320px;margin-bottom:2rem;background:#1a1a1a;
-                            padding:1.5rem;border-radius:16px;" />
+                     style="max-width:320px;margin-bottom:2rem;" />
                 </div>''',
                 unsafe_allow_html=True,
             )
@@ -1163,12 +1193,12 @@ if page == "📈 Portfolio Summary":
                     f'''<div style="margin-bottom:0.6rem;">
                     <div style="display:flex;justify-content:space-between;font-size:0.82rem;font-weight:500;color:{TEXT_DARK};">
                         <span>{row["Asset"]}</span>
-                        <span style="color:{ACCENT};">{alloc:.1f}%</span>
+                        <span style="color:#4a5a3a;">{alloc:.1f}%</span>
                     </div>
                     <div style="background:{WARM_BEIGE};border-radius:4px;height:5px;margin-top:3px;">
                         <div style="width:{bar_w}%;background:{DARK_OLIVE};height:5px;border-radius:4px;"></div>
                     </div>
-                    <div style="font-size:0.75rem;color:{ACCENT};margin-top:2px;">KES {mv:,.0f}</div>
+                    <div style="font-size:0.75rem;color:#4a5a3a;margin-top:2px;">KES {mv:,.0f}</div>
                     </div>''',
                     unsafe_allow_html=True,
                 )
@@ -3115,7 +3145,7 @@ elif page == "📧 Reports & Email":
             _use_password = st.checkbox("Password-protect PDF", value=True, key="pdf_gen_pwd_toggle")
         with _g3:
             _logo_path = os.path.join(_HERE, "Logo.png")
-            st.markdown(f'<div style="padding-top:1.8rem;font-size:0.82rem;color:{ACCENT};">'
+            st.markdown(f'<div style="padding-top:1.8rem;font-size:0.82rem;color:#4a5a3a;">'
                         f'{"✓ Logo found" if os.path.exists(_logo_path) else "⚠ Logo.png not found"}</div>',
                         unsafe_allow_html=True)
 
@@ -4671,19 +4701,18 @@ with footer_cols[1]:
         st.markdown(
             f'''<div style="text-align:center;margin-bottom:0.4rem;">
             <img src="data:image/png;base64,{_logo_b64}"
-                 style="max-width:140px;opacity:0.5;background:#1a1a1a;
-                        padding:0.5rem;border-radius:8px;" />
+                 style="max-width:140px;opacity:0.45;" />
             </div>''',
             unsafe_allow_html=True,
         )
     st.markdown(
-        f'''<div style="text-align:center;color:{ACCENT};font-size:0.75rem;font-family:Inter,sans-serif;line-height:1.8;">
+        f'''<div style="text-align:center;color:#4a5a3a;font-size:0.75rem;font-family:Inter,sans-serif;line-height:1.8;">
         <strong style="color:{DARK_OLIVE};">PRO_LAW Portfolio Tracking System</strong><br>
         NSE Kenya · Prices from mansamarkets.com<br>
         For informational purposes only — not financial advice.<br>
         <span style="color:{BORDER_COLOR};">© 2026 PRO_LAW. All rights reserved.</span><br>
         <a href="mailto:lawrenceowini17@gmail.com"
-           style="color:{ACCENT};text-decoration:none;">
+           style="color:#4a5a3a;text-decoration:none;">
            lawrenceowini17@gmail.com
         </a> · For enquiries and support
         </div>''',
