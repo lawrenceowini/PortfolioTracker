@@ -82,6 +82,14 @@ except ImportError:
     HAS_AUDIT = False
 
 try:
+    import auth as _auth_mod
+    import permissions as _perm
+    import login_page as _login
+    HAS_AUTH = True
+except ImportError:
+    HAS_AUTH = False
+
+try:
     import pdf_report as _pdf
     HAS_PDF_PRO = True
 except ImportError:
@@ -118,6 +126,29 @@ WARM_WHITE   = "#ECEAE4"
 SOFT_BEIGE   = "#EAECE6"
 BORDER_COLOR = "#B8AA91"
 ACCENT       = "#7A8C6E"
+
+# ─── Authentication gate ───────────────────────────────────────────────────────
+if HAS_AUTH:
+    try:
+        # Check session timeout first
+        _session_expired = (
+            st.session_state.get("authenticated") and
+            not _auth_mod.check_session_timeout()
+        )
+        _login.render_login_gate(session_expired=_session_expired)
+    except Exception as _auth_ex:
+        st.error(f"Authentication error: {_auth_ex}")
+        st.code(str(_auth_ex))
+        import traceback
+        st.code(traceback.format_exc())
+        st.stop()
+else:
+    # Auth modules not installed — show warning banner but continue
+    st.warning(
+        "Authentication modules not found. "
+        "Install with: pip install bcrypt pyjwt python-dotenv --break-system-packages",
+        icon="🔓",
+    )
 
 # ─── Custom CSS (Insightfolio-inspired, PRO_LAW branded) ──────────────────────
 st.markdown(f"""
@@ -773,9 +804,26 @@ with st.sidebar:
                 unsafe_allow_html=True,
             )
         else:
+            # Filter portfolios by user access level
+            _all_pf_names = [os.path.basename(f) for f in xlsx_files]
+            if HAS_AUTH and st.session_state.get("user"):
+                _visible_pfs = _perm.get_accessible_portfolios(
+                    _all_pf_names, st.session_state.user
+                )
+                if not _visible_pfs:
+                    st.markdown(
+                        '<div style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.4);'
+                        'border-radius:6px;padding:0.5rem 0.7rem;font-size:0.78rem;color:rgba(241,233,203,0.9);'
+                        'margin-top:0.3rem;">No portfolios assigned to your account</div>',
+                        unsafe_allow_html=True,
+                    )
+                    xlsx_files = []
+            else:
+                _visible_pfs = _all_pf_names
+
             chosen = st.selectbox(
                 "Portfolio:",
-                [os.path.basename(f) for f in xlsx_files],
+                _visible_pfs,
                 label_visibility="collapsed",
             )
             chosen_path = os.path.join(reports_dir, chosen)
@@ -807,34 +855,46 @@ with st.sidebar:
     if "active_page" not in st.session_state:
         st.session_state.active_page = "📈 Portfolio Summary"
 
-    _NAV_GROUPS = [
-        ("PORTFOLIO", [
-            "📈 Portfolio Summary",
-            "🏦 NSE Live Prices",
-            "🥧 Allocation Charts",
-            "💰 Dividends",
-        ]),
-        ("ANALYTICS", [
-            "📊 Benchmark Comparison",
-            "📐 Risk-Adjusted Returns",
-            "💼 Cost & P&L Tracking",
-            "📅 Performance History",
-            "💱 Multi-Currency",
-        ]),
-        ("MANAGEMENT", [
-            "⚠️ Risk & Rebalancing",
-            "🎛️ Risk Settings",
-            "🎯 Target Allocation",
-            "📋 Corporate Actions",
-            "🔄 Transactions",
-        ]),
-        ("SYSTEM", [
-            "🔔 Alerts",
-            "🧾 Tax Reporting",
-            "📧 Reports & Email",
-            "🔏 Audit Trail",
-        ]),
-    ]
+    # Permission-filtered nav — only show pages the user can access
+    _user_role = st.session_state.get("user_role", "viewer") if HAS_AUTH else "admin"
+    if HAS_AUTH:
+        _NAV_GROUPS = _perm.filter_nav(_user_role)
+        # Always append My Account
+        _sys_group = next((g for g in _NAV_GROUPS if g[0] == "SYSTEM"), None)
+        if _sys_group:
+            if "⚙️ My Account" not in _sys_group[1]:
+                _sys_group[1].append("⚙️ My Account")
+    else:
+        _NAV_GROUPS = [
+            ("PORTFOLIO", [
+                "📈 Portfolio Summary",
+                "🏦 NSE Live Prices",
+                "🥧 Allocation Charts",
+                "💰 Dividends",
+            ]),
+            ("ANALYTICS", [
+                "📊 Benchmark Comparison",
+                "📐 Risk-Adjusted Returns",
+                "💼 Cost & P&L Tracking",
+                "📅 Performance History",
+                "💱 Multi-Currency",
+            ]),
+            ("MANAGEMENT", [
+                "⚠️ Risk & Rebalancing",
+                "🎛️ Risk Settings",
+                "🎯 Target Allocation",
+                "📋 Corporate Actions",
+                "🔄 Transactions",
+            ]),
+            ("SYSTEM", [
+                "🔔 Alerts",
+                "🧾 Tax Reporting",
+                "📧 Reports & Email",
+                "🔏 Audit Trail",
+                "👤 User Management",
+                "⚙️ My Account",
+            ]),
+        ]
 
     for _group_label, _pages in _NAV_GROUPS:
         st.markdown(_group_label)
@@ -854,6 +914,36 @@ with st.sidebar:
     page = st.session_state.active_page
 
     st.markdown("---")
+
+    # ── User info + logout ────────────────────────────────────────────────────
+    if HAS_AUTH and st.session_state.get("authenticated"):
+        _uname = st.session_state.get("user_name", "User")
+        _urole = st.session_state.get("user_role", "viewer")
+        st.markdown(
+            f'''<div style="padding:0.4rem 0.2rem;">
+            <div style="color:rgba(241,233,203,0.55);font-size:0.68rem;font-weight:700;
+                        letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0.25rem;">
+                Signed in as</div>
+            <div style="color:#F1E9CB;font-size:0.82rem;font-weight:600;
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                {_uname}</div>
+            <div style="margin-top:0.25rem;">{_perm.role_badge(_urole)}</div>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+        if st.button("Sign Out", key="logout_btn"):
+            try:
+                if HAS_AUDIT:
+                    _audit.append_entry("SESSION_START", {
+                        "event": "LOGOUT",
+                        "email": st.session_state.get("user_email", ""),
+                    })
+            except Exception:
+                pass
+            _auth_mod.logout_user()
+            st.rerun()
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+
     st.caption(f"PRO_LAW Portfolio Tracking\n{datetime.datetime.now().strftime('%d %b %Y %H:%M')}")
 
 
@@ -1004,6 +1094,7 @@ if HAS_AUDIT and "audit_session_started" not in st.session_state:
     st.session_state.audit_session_started = True
 
 if page == "📈 Portfolio Summary":
+    if HAS_AUTH: _perm.require_page_permission("📈 Portfolio Summary")
     st.markdown('<div class="main-header">Portfolio Summary</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Overview of your holdings, market values and allocation</p>', unsafe_allow_html=True)
 
@@ -2599,6 +2690,7 @@ elif page == "🎯 Target Allocation":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "📋 Corporate Actions":
+    if HAS_AUTH: _perm.require_page_permission("📋 Corporate Actions")
     st.markdown('<div class="main-header">Corporate Actions</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Track stock splits, bonus issues, rights issues and consolidations — and see their impact on your holdings</p>', unsafe_allow_html=True)
 
@@ -2856,6 +2948,7 @@ elif page == "🔄 Transactions":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🎛️ Risk Settings":
+    if HAS_AUTH: _perm.require_page_permission("🎛️ Risk Settings")
     st.markdown('<div class="main-header">Risk Settings</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Customise risk parameters and see live diversification score</p>', unsafe_allow_html=True)
 
@@ -3113,6 +3206,7 @@ elif page == "🎛️ Risk Settings":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "📧 Reports & Email":
+    if HAS_AUTH: _perm.require_page_permission("📧 Reports & Email")
     import datetime as _dt
     import smtplib
     from email.mime.text import MIMEText
@@ -3420,6 +3514,7 @@ elif page == "📧 Reports & Email":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🧾 Tax Reporting":
+    if HAS_AUTH: _perm.require_page_permission("🧾 Tax Reporting")
     import datetime as _dt_tax
 
     st.markdown('<div class="main-header">Tax Reporting</div>', unsafe_allow_html=True)
@@ -4113,6 +4208,7 @@ elif page == "🔔 Alerts":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "💱 Multi-Currency":
+    if HAS_AUTH: _perm.require_page_permission("💱 Multi-Currency")
     st.markdown('<div class="main-header">Multi-Currency</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Manage USD, GBP, EUR, ZAR and custom currency holdings — all converted to KES for unified reporting</p>', unsafe_allow_html=True)
 
@@ -4471,6 +4567,7 @@ elif page == "💱 Multi-Currency":
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif page == "🔏 Audit Trail":
+    if HAS_AUTH: _perm.require_page_permission("🔏 Audit Trail")
     st.markdown('<div class="main-header">Audit Trail</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Tamper-evident log of every significant action — file loads, changes, emails, script runs and alerts</p>', unsafe_allow_html=True)
 
@@ -4691,6 +4788,302 @@ elif page == "🔏 Audit Trail":
                 st.rerun()
         else:
             st.info("No audit entries to export yet.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: USER MANAGEMENT (Admin only)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "👤 User Management":
+    if HAS_AUTH:
+        _perm.require_page_permission("👤 User Management")
+    st.markdown('<div class="main-header">User Management</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Create, edit and manage user accounts and portfolio access</p>', unsafe_allow_html=True)
+
+    if not HAS_AUTH:
+        st.error("Auth modules not installed.")
+        st.stop()
+
+    tab_users, tab_create, tab_portfolios = st.tabs([
+        "All Users", "Create User", "Portfolio Access"
+    ])
+
+    with tab_users:
+        st.markdown('<div class="section-title">Registered Users</div>', unsafe_allow_html=True)
+        users_list = _auth_mod.list_local_users()
+
+        if not users_list:
+            st.info("No users found.")
+        else:
+            import pandas as _upd
+            users_df = _upd.DataFrame([{
+                "Email"      : u.get("email",""),
+                "Full Name"  : u.get("full_name",""),
+                "Role"       : u.get("role","viewer").upper(),
+                "MFA"        : "Enabled" if u.get("mfa_enabled") else "Disabled",
+                "Active"     : "Yes" if u.get("active", True) else "No",
+                "Last Login" : u.get("last_login","Never") or "Never",
+                "Portfolios" : ", ".join(u.get("assigned_portfolios",[]) or []) or "All",
+            } for u in users_list])
+            st.dataframe(users_df, use_container_width=True, hide_index=True)
+
+            st.markdown('<div class="section-title">Edit User</div>', unsafe_allow_html=True)
+            edit_email = st.selectbox("Select user to edit:", [u["email"] for u in users_list], key="um_edit_sel")
+            edit_user  = next((u for u in users_list if u["email"] == edit_email), {})
+
+            e1, e2 = st.columns(2)
+            with e1:
+                new_role   = st.selectbox("Role", _auth_mod.ROLES,
+                                          index=_auth_mod.ROLES.index(edit_user.get("role","viewer")),
+                                          key="um_role")
+                new_active = st.checkbox("Account Active", value=edit_user.get("active", True), key="um_active")
+            with e2:
+                new_name = st.text_input("Full Name", value=edit_user.get("full_name",""), key="um_name")
+                new_pwd  = st.text_input("New Password (leave blank to keep)", type="password", key="um_pwd")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Save Changes", type="primary", key="um_save"):
+                    _auth_mod.update_local_user(edit_email, role=new_role, active=new_active, full_name=new_name)
+                    if new_pwd.strip():
+                        score, issues = _auth_mod.check_password_strength(new_pwd)
+                        if score < 2:
+                            st.error("Password too weak: " + "; ".join(issues))
+                        else:
+                            _auth_mod.change_password(edit_email, new_pwd)
+                    if HAS_AUDIT:
+                        _audit.append_entry("CONFIG_CHANGE", {
+                            "action": "user_updated",
+                            "target": edit_email,
+                            "by"    : st.session_state.get("user_email",""),
+                        })
+                    st.success(f"User {edit_email} updated.")
+                    st.rerun()
+            with c2:
+                _me = st.session_state.get("user_email","")
+                if edit_email != _me:
+                    if st.button("Delete User", key="um_del"):
+                        _auth_mod.delete_local_user(edit_email)
+                        if HAS_AUDIT:
+                            _audit.append_entry("CONFIG_CHANGE", {
+                                "action": "user_deleted",
+                                "target": edit_email,
+                                "by"    : _me,
+                            })
+                        st.success(f"User {edit_email} deleted.")
+                        st.rerun()
+                else:
+                    st.caption("Cannot delete your own account.")
+
+    with tab_create:
+        st.markdown('<div class="section-title">Create New User</div>', unsafe_allow_html=True)
+        with st.form("create_user_form"):
+            c_name  = st.text_input("Full Name")
+            c_email = st.text_input("Email Address")
+            c_role  = st.selectbox("Role", _auth_mod.ROLES, index=0)
+            c_pwd   = st.text_input("Password", type="password")
+            c_pwd2  = st.text_input("Confirm Password", type="password")
+
+            if c_pwd:
+                score, issues = _auth_mod.check_password_strength(c_pwd)
+                st.markdown(f"**Password strength:** {'Weak' if score < 2 else 'Fair' if score < 3 else 'Strong'}")
+
+            submitted = st.form_submit_button("Create User")
+
+        if submitted:
+            if not c_email or not c_pwd:
+                st.error("Email and password are required.")
+            elif c_pwd != c_pwd2:
+                st.error("Passwords do not match.")
+            else:
+                score, issues = _auth_mod.check_password_strength(c_pwd)
+                if score < 2:
+                    st.error("Password too weak: " + "; ".join(issues))
+                else:
+                    try:
+                        _auth_mod.create_local_user(c_email.strip().lower(), c_pwd, c_role, c_name)
+                        if HAS_AUDIT:
+                            _audit.append_entry("CONFIG_CHANGE", {
+                                "action": "user_created",
+                                "target": c_email,
+                                "role"  : c_role,
+                                "by"    : st.session_state.get("user_email",""),
+                            })
+                        st.success(f"User {c_email} created with role {c_role.upper()}.")
+                        st.rerun()
+                    except ValueError as e:
+                        st.error(str(e))
+
+    with tab_portfolios:
+        st.markdown('<div class="section-title">Assign Portfolio Access</div>', unsafe_allow_html=True)
+        st.caption("Viewers are restricted to their assigned portfolios. Managers and Admins have full access.")
+
+        import glob as _glob2
+        _rdir    = "reports"
+        _all_pfs = [os.path.basename(f).replace("_Dashboard_Output.xlsx","")
+                    for f in _glob2.glob(os.path.join(_rdir, "*_Dashboard_Output.xlsx"))]
+
+        users_list2 = [u for u in _auth_mod.list_local_users() if u.get("role") == "viewer"]
+        if not users_list2:
+            st.info("No viewer accounts to configure. Managers and Admins have access to all portfolios.")
+        elif not _all_pfs:
+            st.info("No portfolio files found in reports/.")
+        else:
+            pf_email = st.selectbox("Select viewer:", [u["email"] for u in users_list2], key="pf_user")
+            pf_user  = next((u for u in users_list2 if u["email"] == pf_email), {})
+            assigned = pf_user.get("assigned_portfolios", []) or []
+
+            selected_pfs = st.multiselect(
+                "Portfolios this viewer can access:",
+                _all_pfs,
+                default=[p for p in assigned if p in _all_pfs],
+                key="pf_sel",
+            )
+            if st.button("Save Portfolio Access", type="primary", key="pf_save"):
+                _auth_mod.update_local_user(pf_email, assigned_portfolios=selected_pfs)
+                if HAS_AUDIT:
+                    _audit.append_entry("CONFIG_CHANGE", {
+                        "action"    : "portfolio_access_updated",
+                        "target"    : pf_email,
+                        "portfolios": selected_pfs,
+                        "by"        : st.session_state.get("user_email",""),
+                    })
+                st.success(f"Access updated for {pf_email}.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: MY ACCOUNT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif page == "⚙️ My Account":
+    st.markdown('<div class="main-header">My Account</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Manage your password and two-factor authentication</p>', unsafe_allow_html=True)
+
+    if not HAS_AUTH:
+        st.error("Auth modules not installed.")
+        st.stop()
+
+    _me_email = st.session_state.get("user_email", "")
+    _me_name  = st.session_state.get("user_name", "")
+    _me_role  = st.session_state.get("user_role", "viewer")
+
+    # Profile card
+    k1, k2, k3 = st.columns(3)
+    with k1:
+        st.markdown(kpi_card("Name",  _me_name,  "Your display name"), unsafe_allow_html=True)
+    with k2:
+        st.markdown(kpi_card("Email", _me_email, "Login email"), unsafe_allow_html=True)
+    with k3:
+        st.markdown(kpi_card("Role",  _me_role.upper(), "Access level"), unsafe_allow_html=True)
+    st.markdown("")
+
+    tab_pwd, tab_mfa = st.tabs(["Change Password", "Two-Factor Authentication"])
+
+    with tab_pwd:
+        st.markdown('<div class="section-title">Change Password</div>', unsafe_allow_html=True)
+        with st.form("change_pwd_form"):
+            old_pwd  = st.text_input("Current Password", type="password")
+            new_pwd  = st.text_input("New Password", type="password")
+            new_pwd2 = st.text_input("Confirm New Password", type="password")
+
+            if new_pwd:
+                score, issues = _auth_mod.check_password_strength(new_pwd)
+                strength_labels = ["Very weak","Weak","Fair","Strong","Very strong"]
+                st.caption(f"Strength: {strength_labels[score]}")
+                for issue in issues:
+                    st.caption(f"• {issue}")
+
+            submitted = st.form_submit_button("Update Password")
+
+        if submitted:
+            ok, result, _ = _auth_mod.authenticate(_me_email, old_pwd)
+            if not ok:
+                st.error("Current password is incorrect.")
+            elif new_pwd != new_pwd2:
+                st.error("New passwords do not match.")
+            else:
+                score, issues = _auth_mod.check_password_strength(new_pwd)
+                if score < 2:
+                    st.error("Password too weak: " + "; ".join(issues))
+                else:
+                    _auth_mod.change_password(_me_email, new_pwd)
+                    if HAS_AUDIT:
+                        _audit.append_entry("CONFIG_CHANGE", {
+                            "action": "password_changed",
+                            "email" : _me_email,
+                        })
+                    st.success("Password updated successfully.")
+
+    with tab_mfa:
+        st.markdown('<div class="section-title">Two-Factor Authentication (TOTP)</div>', unsafe_allow_html=True)
+
+        users_data = _auth_mod._load_local_users()
+        me_data    = users_data.get(_me_email, {})
+        mfa_on     = me_data.get("mfa_enabled", False)
+
+        if mfa_on:
+            st.markdown(
+                '<div class="alert-card-ok">MFA is <strong>enabled</strong> on your account. '
+                'You are required to enter a TOTP code at each login.</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Disable MFA", key="mfa_disable"):
+                _auth_mod.update_local_user(_me_email, mfa_enabled=False, mfa_secret=None)
+                st.success("MFA disabled.")
+                st.rerun()
+        else:
+            st.markdown(
+                '<div class="alert-card">MFA is <strong>not enabled</strong>. '
+                'We strongly recommend enabling it for account security.</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Set Up MFA", type="primary", key="mfa_setup"):
+                secret, uri = _auth_mod.setup_mfa(_me_email)
+                if secret:
+                    st.session_state._mfa_setup_secret = secret
+                    st.session_state._mfa_setup_uri    = uri
+                else:
+                    st.error("pyotp not installed. Run: pip install pyotp qrcode --break-system-packages")
+
+            if st.session_state.get("_mfa_setup_secret"):
+                secret = st.session_state._mfa_setup_secret
+                uri    = st.session_state._mfa_setup_uri
+
+                st.markdown('<div class="section-title">Scan QR Code</div>', unsafe_allow_html=True)
+                st.caption("Scan this QR code with Google Authenticator, Authy, or any TOTP app.")
+
+                try:
+                    import qrcode, io
+                    qr  = qrcode.make(uri)
+                    buf = io.BytesIO()
+                    qr.save(buf, format="PNG")
+                    st.image(buf.getvalue(), width=200)
+                except ImportError:
+                    st.code(uri, language=None)
+                    st.caption("Copy this URI into your authenticator app manually.")
+
+                st.caption(f"Or enter this secret key manually: `{secret}`")
+                st.markdown('<div class="section-title">Verify Setup</div>', unsafe_allow_html=True)
+
+                with st.form("mfa_verify_form"):
+                    token = st.text_input("Enter the 6-digit code from your app", max_chars=6)
+                    verify_btn = st.form_submit_button("Verify and Enable MFA")
+
+                if verify_btn:
+                    if _auth_mod.verify_totp(secret, token.strip()):
+                        _auth_mod.enable_mfa(_me_email, secret)
+                        del st.session_state._mfa_setup_secret
+                        del st.session_state._mfa_setup_uri
+                        st.session_state.mfa_verified = True
+                        if HAS_AUDIT:
+                            _audit.append_entry("CONFIG_CHANGE", {
+                                "action": "mfa_enabled",
+                                "email" : _me_email,
+                            })
+                        st.success("MFA enabled successfully.")
+                        st.rerun()
+                    else:
+                        st.error("Invalid code. Please try again.")
 
 
 # ─── Footer ─────────────────────────────────────────────────────────────────

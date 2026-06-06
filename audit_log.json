@@ -871,5 +871,39 @@
     },
     "user_note": "",
     "entry_hash": "4caeb8062d9b55fc08e0d4bb41c0ec3ef3a0bb29da497c4d16a503bcd21908f0"
+  },
+  {
+    "id": 51,
+    "timestamp": "2026-06-06 12:19:50",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "b9cbee38fd7e23c75d11ae55680fbb9f790737294d38b30cc57f98aa080ac87f"
+  },
+  {
+    "id": 52,
+    "timestamp": "2026-06-06 12:19:50",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "80cdc47874ede60293bb88e69c3b3dc5b8811698c0e4abac8d699aeaf4698439"
   }
 ]
