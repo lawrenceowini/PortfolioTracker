@@ -1,259 +1,124 @@
-# Portfolio Tracker & Dashboard Generator
+# PRO_LAW Portfolio Tracker
 
-A comprehensive Python-based portfolio management tool that generates automated Excel dashboards and PDF reports for tracking investment portfolios. The system supports multiple client portfolios with live NSE price updates, risk analysis, dividend tracking, and email notifications.
+A Python and Streamlit portfolio management app for Kenyan/NSE portfolios. It converts client Excel workbooks into styled dashboard workbooks and PDF reports, then presents the generated data in an authenticated Streamlit dashboard.
 
-## Features
+## What It Does
 
-### Core Functionality
+- Processes client portfolio workbooks from `clients/`.
+- Fetches mapped NSE prices for supported holdings.
+- Builds Excel dashboard outputs in `reports/`.
+- Generates branded PDF portfolio reports.
+- Tracks allocations, concentration risk, rebalancing suggestions, dividends, performance history, transactions, taxes, alerts, FX exposure, and audit events.
+- Supports role-based access with local users or Supabase-backed authentication.
 
-- **Live NSE Price Integration**: Automatically fetches current market prices for Kenyan stocks via web scraping
-- **Multi-Portfolio Support**: Process multiple client portfolios in a single run
-- **Excel Dashboard Generation**: Creates detailed Excel workbooks with:
-  - Asset allocation visualization
-  - Sector allocation analysis
-  - Risk management monitoring
-  - Transaction history
-  - Dividend yield analysis
-  - Performance history tracking
-  - NSE price data with styling
+## Main Entry Points
 
-### Reporting & Analysis
+- `streamlit_dashboard.py` - main web dashboard.
+- `update_portfolio.py` - batch processor that reads `clients/*.xlsx` and writes `reports/*`.
+- `supabase_setup.sql` - optional Supabase schema for hosted authentication/profile data.
 
-- **PDF Reports**: Generate professional PDF summaries including:
-  - 6-month portfolio performance trend with line graph
-  - Risk violations and concentration alerts
-  - Customized styling matching existing files
-- **Risk Management**:
-  - Dynamic asset concentration rules (single-asset cap)
-  - Sector weight limits (20% default)
-  - Risk exclusions for cash and fixed income assets
-  - Automated rebalancing suggestions
-- **Performance Tracking**:
-  - Monthly, quarterly, and yearly return calculations
-  - Historical portfolio value snapshots
-  - Dividend yield summaries
+## Project Layout
 
-### Automation
-
-- **Email Notifications**: Option to email reports to stakeholders for each portfolio
-- **Automated Backups**: Creates timestamped backup of input files before processing
-- **Error Handling**: Graceful degradation with informative warnings for missing dependencies
-
-## Project Structure
-
-```
+```text
 PortfolioTracker/
-├── update_portfolio.py          # Main script
-├── requirements.txt             # Python dependencies
-├── README.md                    # This file
-├── clients/                     # Input folder (portfolio Excel files)
-│   └── Portfolio_Tracker_Kenya.xlsx
-├── reports/                     # Output folder (dashboards & PDFs)
-│   ├── Portfolio_Tracker_Kenya_Dashboard_Output.xlsx
-│   └── Portfolio_Tracker_Kenya_Report.pdf
-└── backup_*.xlsx                # Automatic backups
+  streamlit_dashboard.py        # Streamlit dashboard
+  update_portfolio.py           # Excel/PDF generation pipeline
+  auth.py                       # Local/Supabase authentication
+  permissions.py                # Role and page permissions
+  pdf_report.py                 # Professional PDF reports
+  alerts.py                     # Portfolio alert checks
+  multi_currency.py             # FX rates and KES conversion
+  target_allocation.py          # Target allocation drift/trades
+  clients/                      # Local input workbooks, ignored by git
+  reports/                      # Generated dashboard workbooks/PDFs, ignored by git
+  Template/                     # Starter workbook template
+  Images/, Logo.png, Icon.png   # Branding assets
 ```
 
-## Installation
+## Setup
 
-### Prerequisites
+Use Python 3.10 or newer.
 
-- Python 3.7 or higher
-- pip (Python package manager)
-
-### Setup
-
-1. **Clone/Download the Repository**
-
-   ```bash
-   cd PortfolioTracker
-   ```
-
-2. **Install Dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Verify Installation**
-   ```bash
-   python -m py_compile update_portfolio.py
-   ```
-
-## Usage
-
-### Quick Start
-
-1. **Place Portfolio Files**
-   - Add your portfolio Excel file(s) to the `clients/` folder
-   - Expected sheet: "Holdings" with columns: Asset, Sector, Shares, Buy Price, Current Price
-
-2. **Run the Script**
-
-   ```bash
-   python update_portfolio.py
-   ```
-
-3. **Follow Prompts**
-   - The script will process each portfolio
-   - When prompted, enter an email address to receive the PDF report (or press Enter to skip)
-   - Reports are generated in the `reports/` folder
-
-### Input File Format
-
-Your portfolio Excel file should contain:
-
-- **Holdings sheet**: Core portfolio data
-  - Asset (stock name)
-  - Sector (Banking, Energy, etc.)
-  - Shares (quantity)
-  - Buy Price (KES)
-  - Current Price (formula-based or manual)
-
-- **Dividend Tracking sheet** (optional): Dividend data
-  - Asset, Dividend per Share, Shares, Total Dividend
-
-### Output Files
-
-**Excel Dashboard** (`Portfolio_Tracker_Kenya_Dashboard_Output.xlsx`):
-
-- Dashboard1: Summary, asset allocation, sector allocation, risk analysis
-- Holdings: Full holdings table with latest prices
-- NSE_Prices: Live market data
-- Transactions: Transaction history
-- Performance History: Monthly/quarterly/yearly returns
-- Dividends: Dividend yield analysis (if data provided)
-- Portfolio_State: Current portfolio state (hidden)
-
-**PDF Report** (`Portfolio_Tracker_Kenya_Report.pdf`):
-
-- 6-month performance trend with line graph
-- Risk violation summary (asset & sector concentrations)
-- Current portfolio value snapshot
-
-## Configuration
-
-### Styling Constants (in `update_portfolio.py`)
-
-- `SECTOR_WEIGHT_LIMIT`: Maximum allowed sector allocation (default: 20%)
-- `SINGLE_ASSET_WEIGHT_LIMIT`: Maximum allowed single asset allocation (default: 10%)
-- `SECTOR_RISK_EXCLUSIONS`: Sectors excluded from concentration rules (Cash, Fixed Income)
-- `MONTHS_TO_DISPLAY`: Months for performance history (default: 6)
-
-### Email Configuration
-
-The script supports SMTP email delivery of generated PDF reports using environment variables.
-You can configure values directly in your shell or by placing a `.env` file in the repository root.
-
-Supported variables:
-
-- `EMAIL_SMTP_SERVER` (default: `smtp.gmail.com`)
-- `EMAIL_SMTP_PORT` (default: `587`)
-- `EMAIL_SMTP_USERNAME`
-- `EMAIL_SMTP_PASSWORD`
-- `EMAIL_FROM` (defaults to `EMAIL_SMTP_USERNAME`)
-- `EMAIL_USE_TLS` (default: `True`)
-- `EMAIL_USE_SSL` (default: `False`)
-
-Example `.env` file contents:
-
-```dotenv
-EMAIL_SMTP_SERVER=smtp.gmail.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_USERNAME=you@example.com
-EMAIL_SMTP_PASSWORD=yourpassword
-EMAIL_FROM=you@example.com
-EMAIL_USE_TLS=True
-EMAIL_USE_SSL=False
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Then run:
+## Running The Dashboard
+
+```bash
+streamlit run streamlit_dashboard.py
+```
+
+On first run, if Supabase is not configured and no local admin exists, the login page lets you create an administrator account.
+
+## Generating Portfolio Outputs
+
+Place client workbooks in `clients/`, then run:
 
 ```bash
 python update_portfolio.py
 ```
 
-### Color Scheme
+The processor creates:
 
-The tool uses a cohesive color palette:
+- `reports/<Portfolio>_Dashboard_Output.xlsx`
+- `reports/<Portfolio>_Report.pdf`
+- `backup_<Portfolio>_<timestamp>.xlsx`
 
-- Dark Olive: `#3B4436`
-- Cream: `#F1E9CB`
-- Text Dark: `#2F332E`
-- Warm Beige: `#E6DFD3`
+The dashboard can then load generated workbooks automatically from `reports/`.
 
-## Supported Features
+## Workbook Expectations
 
-### Stock Tickers
+Input workbooks should include a `Holdings` sheet with at least:
 
-The system includes mappings for Kenyan NSE stocks:
+- `Asset`
+- `Sector`
+- `Shares`
+- `Buy Price`
+- `Current Price`
 
-- Co-op Bank (COOP)
-- Equity Bank (EQTY)
-- KCB Bank (KCB)
-- NCBA (NCBA)
-- Safaricom (SCOM)
-- Jubilee Insurance (JUB)
-- CIC Insurance (CIC)
-- Britam Holdings (BRIT)
-- KenGen (KEGN)
-- Kenya Power (KPLC)
-- Total Energies (TOTL)
+Optional dividend data can be provided in a `Dividend Tracking` sheet.
 
-Plus support for ETFs and manual price entry for non-NSE assets.
+Generated dashboard workbooks include sheets such as:
 
-## Troubleshooting
+- `Dashboard1`
+- `Holdings`
+- `Dividends`
+- `Performance History`
+- `NSE_Prices`
+- `Transactions`
+- `Portfolio_State`
 
-### Missing reportlab Error
+## Configuration
 
-If you see "Warning: reportlab not installed":
+Create a local `.env` file for secrets and service settings. This file is ignored by git.
 
-```bash
-pip install reportlab
+```dotenv
+EMAIL_SMTP_SERVER=smtp.gmail.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_USERNAME=you@example.com
+EMAIL_SMTP_PASSWORD=your-app-password
+EMAIL_FROM=you@example.com
+EMAIL_USE_TLS=True
+
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
 ```
 
-### Email Sending Issues
+Supabase is optional. If `SUPABASE_URL` and `SUPABASE_ANON_KEY` are missing, the app uses the local user store.
 
-The script now supports SMTP email delivery for PDF reports. If the email fails, verify that your SMTP settings are configured correctly in environment variables.
+## Git Hygiene
 
-Common checks:
+The repository ignores local secrets, generated reports, backups, caches, logs, and client workbooks. If these files were already tracked before `.gitignore` was added, remove them from git tracking without deleting local copies:
 
-- `EMAIL_SMTP_SERVER` and `EMAIL_SMTP_PORT` are correct for your provider
-- `EMAIL_SMTP_USERNAME` and `EMAIL_SMTP_PASSWORD` are set
-- `EMAIL_FROM` is a valid sender address
-- Use an app password if your email provider requires it (for Gmail/Outlook)
+```bash
+git rm --cached .env
+git rm --cached -r __pycache__ reports
+git rm --cached backup_*.xlsx Portfolio_Dashboard_Output.xlsx
+git rm --cached clients/*.xlsx
+git rm --cached alerts_log.json audit_log.json fx_rates_cache.json
+```
 
-### NSE Price Fetch Failures
-
-- Some stocks may not have live prices available (marked as "NSE live market data unavailable")
-- Manually enter prices in the Excel file or use the Current Price column
-
-## Performance Notes
-
-- First run: ~5-10 seconds per portfolio (includes NSE price fetching)
-- Subsequent runs: ~2-5 seconds (faster with cached prices)
-- PDF generation: ~2-3 seconds per portfolio
-- Multiple portfolios are processed sequentially
-
-## Future Enhancements
-
-- Email automation with SMTP configuration
-- Multi-threading for faster multi-portfolio processing
-- Historical price tracking and trend analysis
-- Custom rebalancing recommendations
-- Mobile app integration
-- API endpoints for real-time data
-
-## License
-
-Internal use only
-
-## Support
-
-For issues or questions, review the script output and check the generated Excel files for data validation.
-
----
-
-**Version**: 1.0  
-**Last Updated**: June 2026  
-**Author**: Portfolio Management System
+Run those commands only when you are ready to clean the repository index.

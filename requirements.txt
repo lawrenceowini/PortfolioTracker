@@ -1,27 +1,24 @@
 # Portfolio Tracker & Dashboard Generator - Requirements
 
-# Core Data Processing
-pandas>=1.3.0
-openpyxl>=3.6.0
+# Web dashboard
+streamlit>=1.35.0
+plotly>=5.20.0
 
-# Visualization & PDF Generation
-matplotlib>=3.3.0
-reportlab>=3.6.0
-PyPDF2>=3.0.0  # For PDF password protection
+# Core data processing
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
 
-# Optional: For advanced email functionality
-python-dotenv>=0.19.0  # For environment variable management
+# Visualization and PDF generation
+matplotlib>=3.7.0
+reportlab>=4.0.0
+PyPDF2>=3.0.0
 
-# Note: The following are part of Python standard library and don't need to be installed:
-# - urllib (web requests)
-# - smtplib (email)
-# - re (regex)
-# - ast (abstract syntax trees)
-# - datetime (date/time handling)
-# - html (HTML parsing)
+# Authentication and configuration
+python-dotenv>=1.0.0
+bcrypt>=4.0.0
+supabase>=2.0.0
 
-# Tested versions:
-# pandas==2.0.0+
-# openpyxl==3.9.0+
-# matplotlib==3.7.0+
-# reportlab==4.0.0+
+# Optional account security
+pyotp>=2.9.0
+qrcode>=7.4.0

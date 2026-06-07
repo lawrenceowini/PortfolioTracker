@@ -905,5 +905,162 @@
     },
     "user_note": "",
     "entry_hash": "80cdc47874ede60293bb88e69c3b3dc5b8811698c0e4abac8d699aeaf4698439"
+  },
+  {
+    "id": 53,
+    "timestamp": "2026-06-06 22:56:20",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "bl687887@gmail.com",
+      "provider": "local",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "d83b2141ddd7d9fde2e87b25b5ef1c37c9ef39aa03b572120c98570e38899bf8"
+  },
+  {
+    "id": 54,
+    "timestamp": "2026-06-06 23:03:42",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "bl687887@gmail.com",
+      "provider": "local",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "9bbe76fb461af71cc3d912fe6b5db6cd4e36edac06ee8898091683facdf9b6c7"
+  },
+  {
+    "id": 55,
+    "timestamp": "2026-06-06 23:08:47",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "event": "LOGOUT",
+      "email": "bl687887@gmail.com"
+    },
+    "user_note": "",
+    "entry_hash": "ed786019181907f760fd094716433b45ec3329e23dea1d4184e94c34a91f65f0"
+  },
+  {
+    "id": 56,
+    "timestamp": "2026-06-06 23:10:10",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "bl687887@gmail.com",
+      "provider": "local",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "fe414f2fb471388879a060748ddb30d170554ebe8c1449831341701af2b586e6"
+  },
+  {
+    "id": 57,
+    "timestamp": "2026-06-06 23:10:31",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "38a12812529b9a272a070e53fe10b2e5a69776e2de7dd7471861968ed737677a"
+  },
+  {
+    "id": 58,
+    "timestamp": "2026-06-07 07:45:20",
+    "event_type": "CONFIG_CHANGE",
+    "description": "System configuration changed",
+    "details": {
+      "action": "user_signup",
+      "email": "sc21206032022@student.mut.ac.ke"
+    },
+    "user_note": "",
+    "entry_hash": "9ffb45d1ccec92f31d3e83e0271f05f6a08dfd92e91411a7709b8a24839a4153"
+  },
+  {
+    "id": 59,
+    "timestamp": "2026-06-07 07:47:06",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "sc21206032022@student.mut.ac.ke",
+      "provider": "supabase",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "30f5a168985015fd034406b281c49d96fc585b7bdd80a16c42bd330c359b00bb"
+  },
+  {
+    "id": 60,
+    "timestamp": "2026-06-07 07:49:26",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "sc21206032022@student.mut.ac.ke",
+      "provider": "supabase",
+      "role": "admin"
+    },
+    "user_note": "",
+    "entry_hash": "16a967d39d5e168b5ca75e80ff0d26bfd825e7730d7a8868231cc14abe5bc98c"
+  },
+  {
+    "id": 61,
+    "timestamp": "2026-06-07 07:49:27",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "b9b858966d6b9d73f5ea5dd370001fb3e21e30c0c6205b1571beee82163edd7c"
+  },
+  {
+    "id": 62,
+    "timestamp": "2026-06-07 07:49:27",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "42d6cfab12bc5260284c13aba8b1e24ce9c35741276560130017bb308ff4b516"
+  },
+  {
+    "id": 63,
+    "timestamp": "2026-06-07 07:49:49",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Lawrence_Client1_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\Lawrence_Client1_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.7,
+      "file_hash": "c91440288ecb0b8d",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "cf7a6228fe4d85c585cd7c86b815e88db4984a50bc22201b0216a8ade2100698"
   }
 ]

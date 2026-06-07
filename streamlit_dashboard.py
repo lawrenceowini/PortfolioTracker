@@ -821,24 +821,33 @@ with st.sidebar:
             else:
                 _visible_pfs = _all_pf_names
 
-            chosen = st.selectbox(
-                "Portfolio:",
-                _visible_pfs,
-                label_visibility="collapsed",
-            )
-            chosen_path = os.path.join(reports_dir, chosen)
-            sheets = load_workbook_sheets(chosen_path, is_path=True)
-            if HAS_AUDIT and sheets:
-                _load_key = f"audited_{chosen_path}"
-                if _load_key not in st.session_state:
-                    _audit.log_file_load(chosen_path, list(sheets.keys()))
-                    st.session_state[_load_key] = True
-            st.markdown(
-                f'<div style="background:#4a5a44;border:1px solid #6b7c65;'
-                f'border-radius:6px;padding:0.4rem 0.7rem;font-size:0.78rem;'
-                f'color:#F1E9CB;font-weight:500;margin-top:0.3rem;">✓ {chosen}</div>',
-                unsafe_allow_html=True,
-            )
+            if not _visible_pfs:
+                st.markdown(
+                    '<div style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.4);'
+                    'border-radius:6px;padding:0.5rem 0.7rem;font-size:0.78rem;color:rgba(241,233,203,0.9);'
+                    'margin-top:0.3rem;">No portfolio files found in reports/</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                chosen = st.selectbox(
+                    "Portfolio:",
+                    _visible_pfs,
+                    label_visibility="collapsed",
+                )
+                if chosen:
+                    chosen_path = os.path.join(reports_dir, chosen)
+                    sheets = load_workbook_sheets(chosen_path, is_path=True)
+                    if HAS_AUDIT and sheets:
+                        _load_key = f"audited_{chosen_path}"
+                        if _load_key not in st.session_state:
+                            _audit.log_file_load(chosen_path, list(sheets.keys()))
+                            st.session_state[_load_key] = True
+                    st.markdown(
+                        f'<div style="background:#4a5a44;border:1px solid #6b7c65;'
+                        f'border-radius:6px;padding:0.4rem 0.7rem;font-size:0.78rem;'
+                        f'color:#F1E9CB;font-weight:500;margin-top:0.3rem;">✓ {chosen}</div>',
+                        unsafe_allow_html=True,
+                    )
     else:
         # Upload mode — show a small hint in sidebar, actual uploader in main area
         st.markdown(

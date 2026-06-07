@@ -156,3 +156,32 @@ ORDER BY u.created_at DESC;
 --      Then update their role in the pro_law_users table:
 --      UPDATE pro_law_users SET role = 'admin' WHERE email = 'you@example.com';
 -- ============================================================================
+
+-- ============================================================================
+-- ADDITIONAL POLICIES (run these if users can't log in or profiles aren't created)
+-- ============================================================================
+
+-- Allow any authenticated user to insert their OWN profile row
+-- (needed so the dashboard can auto-create a profile on first login)
+CREATE POLICY "Users can insert own profile"
+    ON public.pro_law_users
+    FOR INSERT
+    WITH CHECK (auth.uid()::text = user_id::text);
+
+-- Allow any authenticated user to update their OWN profile row
+-- (needed for last_login updates)
+CREATE POLICY "Users can update own profile"
+    ON public.pro_law_users
+    FOR UPDATE
+    USING (auth.uid()::text = user_id::text);
+
+-- Allow users to select their own profile (simpler version without recursion)
+-- Drop the old recursive policy first if it causes infinite loops:
+-- DROP POLICY IF EXISTS "Admins can view all profiles" ON public.pro_law_users;
+-- DROP POLICY IF EXISTS "Users can view own profile" ON public.pro_law_users;
+
+-- Simpler non-recursive select policy:
+CREATE POLICY "All authenticated users can read profiles"
+    ON public.pro_law_users
+    FOR SELECT
+    USING (auth.uid() IS NOT NULL);

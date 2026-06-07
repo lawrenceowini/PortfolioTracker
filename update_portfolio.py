@@ -46,7 +46,7 @@ try:
         print("Warning: .env file not found; using system environment variables only.")
 except ImportError:
     HAS_DOTENV = False
-    print("Warning: python-dotenv not installed — .env file will not be loaded.")
+    print("Warning: python-dotenv not installed - .env file will not be loaded.")
 
 try:
     from PyPDF2 import PdfWriter
@@ -1640,7 +1640,7 @@ def add_dashboard_charts_to_workbook(
 def generate_pdf_report(portfolio_name, performance_history, asset_violations, sector_violations, total_value, output_pdf_path, pdf_password=None):
     """Generate a PDF report with 6-month portfolio performance and risk violations."""
     if not HAS_REPORTLAB:
-        print(f"Warning: reportlab not installed — skipping PDF generation for {portfolio_name}")
+        print(f"Warning: reportlab not installed - skipping PDF generation for {portfolio_name}")
         return False
 
     try:
@@ -1799,7 +1799,7 @@ def generate_pdf_report(portfolio_name, performance_history, asset_violations, s
             except Exception as e:
                 print(f"Warning: failed to encrypt PDF: {e}")
         elif pdf_password and not HAS_PYPDF2:
-            print("Warning: PyPDF2 not installed — PDF will not be password protected")
+            print("Warning: PyPDF2 not installed - PDF will not be password protected")
         
         return True
     except Exception as e:
@@ -1812,7 +1812,7 @@ def generate_pdf_report(portfolio_name, performance_history, asset_violations, s
 def send_email_report(recipient_email, pdf_path, portfolio_name, pdf_password=None):
     """Send the generated PDF report via email."""
     if not HAS_EMAIL:
-        print("Warning: email libraries not available — skipping email send")
+        print("Warning: email libraries not available - skipping email send")
         return False
 
     if not EMAIL_SMTP_USERNAME or not EMAIL_SMTP_PASSWORD or not EMAIL_FROM:
@@ -2305,12 +2305,15 @@ def _ensure_dirs():
         os.makedirs(REPORTS_DIR)
 
 
-_ensure_dirs()
 
-client_files = [f for f in os.listdir(CLIENTS_DIR) if f.lower().endswith('.xlsx')]
-if not client_files:
-    print(f"No .xlsx files found in '{CLIENTS_DIR}' — please add Portfolio_Tracker_Kenya.xlsx or other portfolios.")
-else:
+def main():
+    _ensure_dirs()
+
+    client_files = [f for f in os.listdir(CLIENTS_DIR) if f.lower().endswith(".xlsx")]
+    if not client_files:
+        print(f"No .xlsx files found in '{CLIENTS_DIR}' - please add Portfolio_Tracker_Kenya.xlsx or other portfolios.")
+        return
+
     for cf in client_files:
         input_file = os.path.join(CLIENTS_DIR, cf)
         base = os.path.splitext(cf)[0]
@@ -2329,3 +2332,7 @@ else:
             import traceback
             print(f"Error processing {input_file}: {e}")
             traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

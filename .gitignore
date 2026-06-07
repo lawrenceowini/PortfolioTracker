@@ -1,0 +1,27 @@
+# Python runtime artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local environment and secrets
+.env
+.env.*
+auth_users.json
+
+# Generated portfolio outputs and local state
+reports/
+backup_*.xlsx
+Portfolio_Dashboard_Output.xlsx
+alerts_log.json
+audit_log.json
+alerts_config.json
+fx_rates_cache.json
+
+# Sensitive client workbooks
+clients/*.xlsx
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
