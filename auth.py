@@ -503,3 +503,112 @@ def check_password_strength(password: str) -> tuple:
     if any(c in "!@#$%^&*()_+-=[]{}|;:\',./<>?" for c in password): score += 1
     else: issues.append("Add at least one special character")
     return score, issues
+
+def forgot_password_notify_admin(user_email: str) -> tuple:
+    """
+    Notify the admin that a user has requested a password reset.
+    Does NOT send a reset link — admin verifies identity then resets manually.
+    Returns (success: bool, message: str)
+    """
+    # Get admin email from environment (same SMTP config used for reports)
+    admin_email = os.environ.get("EMAIL_SMTP_USERNAME","").strip()
+    if not admin_email:
+        return False, "Admin email not configured in .env (EMAIL_SMTP_USERNAME)."
+
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        smtp_server = os.environ.get("EMAIL_SMTP_SERVER", "smtp.gmail.com")
+        smtp_port   = int(os.environ.get("EMAIL_SMTP_PORT", "587"))
+        smtp_user   = os.environ.get("EMAIL_SMTP_USERNAME", "")
+        smtp_pass   = os.environ.get("EMAIL_SMTP_PASSWORD", "")
+        use_tls     = os.environ.get("EMAIL_USE_TLS","True").lower() in ("true","1","yes")
+        from_addr   = os.environ.get("EMAIL_FROM", smtp_user) or smtp_user
+
+        if not smtp_user or not smtp_pass:
+            return False, "SMTP credentials not configured in .env."
+
+        now = datetime.datetime.now().strftime("%d %B %Y at %H:%M:%S")
+
+        subject = f"PRO_LAW — Password Reset Request from {user_email}"
+        body = f"""Hello Administrator,
+
+A password reset request has been submitted on the PRO_LAW Portfolio Tracking System.
+
+Details:
+  User Email  : {user_email}
+  Requested at: {now}
+
+IMPORTANT — Before resetting this user's password, please verify:
+  1. You recognise this user and they are who they say they are
+  2. You have confirmed their identity through a separate channel (phone, in-person, etc.)
+  3. They are not currently logged in with a valid session
+
+If you did NOT expect this request, someone may be attempting to access this
+account without authorisation. Do not reset the password without verification.
+
+To reset the password:
+  1. Log in to the PRO_LAW dashboard as Administrator
+  2. Go to User Management → select the user → set a new temporary password
+  3. Inform the user of their temporary password via a secure channel
+  4. Ask them to change it immediately after logging in
+
+PRO_LAW Portfolio Tracking System
+© 2026 PRO_LAW · lawrenceowini17@gmail.com
+"""
+
+        msg = MIMEMultipart()
+        msg["From"]    = from_addr
+        msg["To"]      = admin_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.ehlo()
+        if use_tls:
+            server.starttls()
+            server.ehlo()
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(from_addr, admin_email, msg.as_string())
+        server.quit()
+
+        return True, (
+            "Your request has been sent to the administrator. "
+            "They will verify your identity and contact you with further instructions."
+        )
+    except Exception as e:
+        return False, f"Could not send notification: {e}"
+
+
+def reset_password_supabase(token_hash: str, new_password: str) -> tuple:
+    """Complete a password reset using the token from the reset email."""
+    sb = _get_supabase()
+    if not sb:
+        return False, "Supabase not configured."
+    try:
+        resp = sb.auth.verify_otp({
+            "token_hash": token_hash.strip(),
+            "type"      : "recovery",
+        })
+        user = getattr(resp, "user", None)
+        if user is None:
+            data = getattr(resp, "data", None)
+            user = getattr(data, "user", None) if data else None
+        if not user:
+            return False, "Reset link is invalid or has expired. Please request a new one."
+        sb.auth.update_user({"password": new_password})
+        user_id = str(getattr(user, "id", ""))
+        uemail  = getattr(user, "email", "")
+        profile = _get_or_create_profile(sb, user_id, uemail)
+        _update_last_login(sb, user_id)
+        return True, _build_user_dict(profile, user_id, uemail)
+    except Exception as e:
+        err = str(e)
+        if "expired" in err.lower():
+            return False, "Reset link has expired. Please request a new one."
+        if "invalid" in err.lower() or "otp" in err.lower():
+            return False, "Reset link is invalid or already used. Please request a new one."
+        return False, f"Could not reset password: {err}"
+

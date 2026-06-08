@@ -1408,5 +1408,464 @@
     },
     "user_note": "",
     "entry_hash": "abe20ab7cffcef712549363ea71ebab86a41ad8467bbb5e31a92431c43b9ac27"
+  },
+  {
+    "id": 88,
+    "timestamp": "2026-06-07 21:42:00",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "sc21206032022@student.mut.ac.ke",
+      "provider": "supabase",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "596e491ff5e4c014e842941d1f2ae01cf592efb548355751205fc8dbd9cfbe38"
+  },
+  {
+    "id": 89,
+    "timestamp": "2026-06-07 21:42:01",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.9,
+      "file_hash": "43a32c4a0bd0040f",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "b2ce6c9ef013f2a02f4f647101f554b336812ad9beb96db6d1c0f3a06ffb4897"
+  },
+  {
+    "id": 90,
+    "timestamp": "2026-06-07 21:42:01",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "e96995a4f4a1a27ef453967daa6d5d7df39853f248fa27aba6e679a33b17c7bd"
+  },
+  {
+    "id": 91,
+    "timestamp": "2026-06-07 21:42:15",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "event": "LOGOUT",
+      "email": "sc21206032022@student.mut.ac.ke"
+    },
+    "user_note": "",
+    "entry_hash": "63ea89f9449f2d8d1e69e05fed0c038e765a6165790600a21ed5e9337a6086e9"
+  },
+  {
+    "id": 92,
+    "timestamp": "2026-06-07 22:03:13",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "sc21206032022@student.mut.ac.ke",
+      "provider": "supabase",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "134360690e63df631e407c51711a856b2d100194573cc6932383c10b00eaf1f2"
+  },
+  {
+    "id": 93,
+    "timestamp": "2026-06-07 22:03:14",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "d8c37644af9a0cfe9c94189c02e0f2f67ee97ce90d20189c30563abc5c22e1d4"
+  },
+  {
+    "id": 94,
+    "timestamp": "2026-06-07 22:45:21",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "sc21206032022@student.mut.ac.ke",
+      "provider": "supabase",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "45002d1c1c8a88331e96782a6f867a5f0da3f8c9af1c131fe02e6e2fd5cf8f88"
+  },
+  {
+    "id": 95,
+    "timestamp": "2026-06-07 22:45:22",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.9,
+      "file_hash": "43a32c4a0bd0040f",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "c3f852257bcb302bc0c8409f6e0edb1bc005b59fb485f9bffb57f9fd930fbb5d"
+  },
+  {
+    "id": 96,
+    "timestamp": "2026-06-07 22:45:22",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "00afb3881dfc04fec46b944de2173b99688c32549e29a18b1f8f9e1a2e9ebc07"
+  },
+  {
+    "id": 97,
+    "timestamp": "2026-06-07 23:04:55",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "event": "LOGOUT",
+      "email": "sc21206032022@student.mut.ac.ke"
+    },
+    "user_note": "",
+    "entry_hash": "a7297c4bd5332a14564963da848acdce2f0f67640c01d83825b77f53fef352b2"
+  },
+  {
+    "id": 98,
+    "timestamp": "2026-06-07 23:05:47",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "lawrenceowini17@gmail.com",
+      "provider": "supabase",
+      "role": "admin"
+    },
+    "user_note": "",
+    "entry_hash": "9205cca0b0f63e0e8361d0454026c85f02618d53ed12a97b00b0c8c1b785def5"
+  },
+  {
+    "id": 99,
+    "timestamp": "2026-06-07 23:05:47",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "a9a96a5b364e733c6eb00423adcae4df60e93246c62366141364570947cc4aea"
+  },
+  {
+    "id": 100,
+    "timestamp": "2026-06-07 23:05:47",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "96553ed89dbe29235b98d31cc314c881c00432efc58154d2891bf9a13c7ca670"
+  },
+  {
+    "id": 101,
+    "timestamp": "2026-06-08 14:24:45",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "lawrenceowini17@gmail.com",
+      "provider": "supabase",
+      "role": "admin"
+    },
+    "user_note": "",
+    "entry_hash": "b971a02108751cedde86862f533d91269405f31d536ed3b41dc897556295937c"
+  },
+  {
+    "id": 102,
+    "timestamp": "2026-06-08 14:24:46",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "eecd4bd88685b7ddd3dcdc746314e8b2e2270c3ea93038a386a62bfae4b02366"
+  },
+  {
+    "id": 103,
+    "timestamp": "2026-06-08 14:24:47",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "b56cb0ed3cb01ef3cddce56fbe922b2357ebc9376354dbe53fdaa4d8f5411eb1"
+  },
+  {
+    "id": 104,
+    "timestamp": "2026-06-08 14:34:39",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "lawrenceowini17@gmail.com",
+      "provider": "supabase",
+      "role": "admin"
+    },
+    "user_note": "",
+    "entry_hash": "524075648243ee04d501febd144a19307e02a872718003a7f693900c442b0393"
+  },
+  {
+    "id": 105,
+    "timestamp": "2026-06-08 14:34:39",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "aa1b8dc651b6d831d9adfdeaba7a770a1ef12c4c95f033a566f140c20ae8b9e7"
+  },
+  {
+    "id": 106,
+    "timestamp": "2026-06-08 14:34:39",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "11411835e057b583bac5ece8d48b44606998f97a04d53dfaf06e4f91b6bc11c5"
+  },
+  {
+    "id": 107,
+    "timestamp": "2026-06-08 14:50:55",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "lawrenceowini17@gmail.com",
+      "provider": "supabase",
+      "role": "admin"
+    },
+    "user_note": "",
+    "entry_hash": "ee587b08bcb6f4199bae0051a7f5d582dbb8ee1bae37c5aeef3758a261a01991"
+  },
+  {
+    "id": 108,
+    "timestamp": "2026-06-08 14:50:56",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "f488a4b41327bc4fc59384cff0820ec9e35d96e3cc7337e3efffe6c9f8b154a0"
+  },
+  {
+    "id": 109,
+    "timestamp": "2026-06-08 14:50:56",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "d6bcc1d1a214ee37e18a5a3059bf651794cb18cfc1dcaff88778b854174893aa"
+  },
+  {
+    "id": 110,
+    "timestamp": "2026-06-08 14:52:35",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "sc21206032022@student.mut.ac.ke",
+      "provider": "supabase",
+      "role": "viewer"
+    },
+    "user_note": "",
+    "entry_hash": "ef32864bd19ebbbf0aec0bb941f8bd74f5ecb990ae46f7a0011d52048400548a"
+  },
+  {
+    "id": 111,
+    "timestamp": "2026-06-08 14:52:36",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\MyPortfolio_Tracker_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.9,
+      "file_hash": "43a32c4a0bd0040f",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "91cf16b8bf703f30e0b4478fec951ccc4005f7aa4bc7324338bc3da8bb0fc391"
+  },
+  {
+    "id": 112,
+    "timestamp": "2026-06-08 14:52:36",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "245ad198800016d1ee807f4194535ab47d64d292fffcc1661fbebf58a0872819"
+  },
+  {
+    "id": 113,
+    "timestamp": "2026-06-08 14:56:37",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "event": "LOGOUT",
+      "email": "sc21206032022@student.mut.ac.ke"
+    },
+    "user_note": "",
+    "entry_hash": "4aa654344c9f340b03e895095d08b322c578aac4eeb008c79e7afa0a2b7cce62"
+  },
+  {
+    "id": 114,
+    "timestamp": "2026-06-08 14:57:02",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "email": "bl687887@gmail.com",
+      "provider": "supabase",
+      "role": "manager"
+    },
+    "user_note": "",
+    "entry_hash": "be49717fed43c9abb8d5e47249e3b33d3e9a7582a3f787f1422bf9a2318119f2"
+  },
+  {
+    "id": 115,
+    "timestamp": "2026-06-08 14:57:02",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "path": "reports\\Client_Portfolio_Template_Dashboard_Output.xlsx",
+      "size_kb": 28.2,
+      "file_hash": "a3dea95fae955904",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "a515b0b1402fdbcb4fd9a9c96cc4a2d56d4ad2aab5f7b7cf584ab9909a506799"
+  },
+  {
+    "id": 116,
+    "timestamp": "2026-06-08 14:57:02",
+    "event_type": "SESSION_START",
+    "description": "Dashboard session started",
+    "details": {
+      "dashboard_version": "PRO_LAW v1.0",
+      "python_version": "3.14.5"
+    },
+    "user_note": "",
+    "entry_hash": "ed62311a51dbc0b0bcfc7ba433e830cc407472e6c75836f717ffcf39d278686d"
+  },
+  {
+    "id": 117,
+    "timestamp": "2026-06-08 14:58:07",
+    "event_type": "FILE_LOAD",
+    "description": "Portfolio file loaded into dashboard",
+    "details": {
+      "file": "Lawrence_Client1_Kenya_Dashboard_Output.xlsx",
+      "path": "reports\\Lawrence_Client1_Kenya_Dashboard_Output.xlsx",
+      "size_kb": 18.7,
+      "file_hash": "c91440288ecb0b8d",
+      "sheets": [
+        "dashboard",
+        "holdings",
+        "nse",
+        "dividends",
+        "history",
+        "tx"
+      ]
+    },
+    "user_note": "",
+    "entry_hash": "7e9050e2b1087e396ab9e68b19f59c0625b563a3e36a292acd4cd5a4f34d1d2d"
   }
 ]

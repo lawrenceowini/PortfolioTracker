@@ -1,189 +1,137 @@
 """
-login_page.py — Login, Signup & Invite UI for PRO_LAW Portfolio Tracker
+login_page.py — Sign In UI for PRO_LAW Portfolio Tracker
+Accounts are created by admins only. Forgot password notifies admin.
+Persistent session via st.session_state (survives refresh).
 """
 
 import os
 import streamlit as st
 import auth as _auth
 
-DARK_OLIVE   = "#3B4436"
-CREAM        = "#F1E9CB"
-ACCENT       = "#7A8C6E"
-TEXT_DARK    = "#2F332E"
-BORDER_COLOR = "#B8AA91"
+SESSION_TIMEOUT_M = _auth.SESSION_TIMEOUT_M
 
 LOGIN_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-html, body, .stApp, [data-testid="stAppViewContainer"],
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
 [data-testid="stMainBlockContainer"] {
     font-family: 'Inter', sans-serif;
-    background: linear-gradient(135deg, #2d3a2e 0%, #1e2720 50%, #3B4436 100%) !important;
+    background: linear-gradient(135deg,#2d3a2e 0%,#1e2720 50%,#3B4436 100%) !important;
     min-height: 100vh;
 }
 
 .auth-card {
-    background: rgba(59, 68, 54, 0.18);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(241, 233, 203, 0.18);
+    background: rgba(59,68,54,0.22);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(241,233,203,0.16);
     border-radius: 20px;
     padding: 2.8rem 2.6rem 2.2rem 2.6rem;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.38), 0 1px 0 rgba(241,233,203,0.08) inset;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.42),
+                0 1px 0 rgba(241,233,203,0.07) inset;
     margin: 0 auto;
 }
-
-.auth-logo { text-align: center; margin-bottom: 1.4rem; }
-
+.auth-logo  { text-align:center; margin-bottom:1.3rem; }
 .auth-title {
-    font-size: 1.55rem;
-    font-weight: 700;
-    color: #F1E9CB;
-    text-align: center;
-    margin-bottom: 0.25rem;
-    letter-spacing: -0.02em;
+    font-size:1.5rem; font-weight:700; color:#F1E9CB;
+    text-align:center; margin-bottom:0.25rem; letter-spacing:-0.02em;
 }
-
 .auth-subtitle {
-    font-size: 0.83rem;
-    color: rgba(241,233,203,0.60);
-    text-align: center;
-    margin-bottom: 1.6rem;
+    font-size:0.82rem; color:rgba(241,233,203,0.52);
+    text-align:center; margin-bottom:1.6rem;
 }
-
-.auth-divider {
-    text-align: center;
-    color: rgba(241,233,203,0.40);
-    font-size: 0.78rem;
-    margin: 1rem 0;
-    position: relative;
-}
-
 .auth-footer {
-    text-align: center;
-    font-size: 0.72rem;
-    color: rgba(241,233,203,0.45);
-    margin-top: 1.4rem;
-    line-height: 1.7;
+    text-align:center; font-size:0.71rem;
+    color:rgba(241,233,203,0.35); margin-top:1.5rem; line-height:1.75;
 }
-
 .session-notice {
-    background: rgba(217,119,6,0.20);
-    border-left: 3px solid #d97706;
-    border-radius: 8px;
-    padding: 0.65rem 0.9rem;
-    margin-bottom: 1rem;
-    font-size: 0.83rem;
-    color: #fde68a;
+    background:rgba(217,119,6,0.18); border-left:3px solid #d97706;
+    border-radius:8px; padding:0.62rem 0.9rem; margin-bottom:1rem;
+    font-size:0.82rem; color:#fde68a;
+}
+.success-notice {
+    background:rgba(22,163,74,0.18); border-left:3px solid #22c55e;
+    border-radius:8px; padding:0.7rem 0.9rem; margin-bottom:0.8rem;
+    font-size:0.83rem; color:#86efac; line-height:1.55;
+}
+.info-notice {
+    background:rgba(59,68,54,0.35); border-left:3px solid rgba(241,233,203,0.35);
+    border-radius:8px; padding:0.7rem 0.9rem; margin-bottom:0.8rem;
+    font-size:0.82rem; color:rgba(241,233,203,0.70); line-height:1.55;
 }
 
-.strength-bar-bg {
-    height: 4px; border-radius: 2px;
-    background: rgba(241,233,203,0.15);
-    margin: 4px 0 2px 0;
-}
-
-/* Override Streamlit inputs for dark background */
+/* Inputs */
 .stTextInput input {
-    background: rgba(255,255,255,0.09) !important;
-    border: 1px solid rgba(241,233,203,0.22) !important;
-    border-radius: 9px !important;
-    color: #F1E9CB !important;
-    font-size: 0.875rem !important;
+    background:rgba(255,255,255,0.08) !important;
+    border:1px solid rgba(241,233,203,0.20) !important;
+    border-radius:9px !important;
+    color:#F1E9CB !important; font-size:0.875rem !important;
 }
-.stTextInput input::placeholder { color: rgba(241,233,203,0.35) !important; }
-.stTextInput label { color: rgba(241,233,203,0.75) !important; font-size:0.82rem !important; }
+.stTextInput input::placeholder { color:rgba(241,233,203,0.28) !important; }
+.stTextInput label {
+    color:rgba(241,233,203,0.70) !important; font-size:0.81rem !important;
+}
+.stTextInput input:focus {
+    border-color:rgba(241,233,203,0.42) !important;
+    box-shadow:0 0 0 2px rgba(241,233,203,0.09) !important;
+    outline:none !important;
+}
 
+/* Buttons */
 .stButton > button {
-    width: 100%;
-    background: #3B4436 !important;
-    color: #F1E9CB !important;
-    border: 1px solid rgba(241,233,203,0.25) !important;
-    border-radius: 9px !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-    padding: 0.58rem 1rem !important;
-    transition: all 0.2s !important;
+    background:#3B4436 !important; color:#F1E9CB !important;
+    border:1px solid rgba(241,233,203,0.20) !important;
+    border-radius:9px !important; font-weight:600 !important;
+    font-size:0.875rem !important; padding:0.55rem 1rem !important;
+    transition:all 0.18s !important; width:100%;
 }
 .stButton > button:hover {
-    background: #4a5a44 !important;
-    border-color: rgba(241,233,203,0.40) !important;
+    background:#4a5a44 !important;
+    border-color:rgba(241,233,203,0.36) !important;
 }
-
-/* Tab switcher */
-.stTabs [data-baseweb="tab-list"] {
-    background: rgba(255,255,255,0.06) !important;
-    border-radius: 10px !important;
-    gap: 4px;
-    padding: 4px;
+/* Ghost/link-style button */
+button[kind="secondary"] {
+    background:transparent !important;
+    color:rgba(241,233,203,0.55) !important;
+    border:none !important; font-size:0.78rem !important;
+    font-weight:400 !important; padding:0 !important;
+    text-decoration:underline; width:auto !important;
 }
-.stTabs [data-baseweb="tab"] {
-    color: rgba(241,233,203,0.60) !important;
-    border-radius: 7px !important;
-    font-size: 0.85rem !important;
-}
-.stTabs [aria-selected="true"] {
-    background: #3B4436 !important;
-    color: #F1E9CB !important;
+button[kind="secondary"]:hover {
+    color:#F1E9CB !important; background:transparent !important;
 }
 </style>
 """
 
 
-def _logo_html(max_width: int = 180) -> str:
-    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logo.png")
-    if not os.path.exists(logo_path):
-        return f'<div style="font-size:1.6rem;font-weight:800;color:#F1E9CB;letter-spacing:-0.04em;">PRO_LAW</div>'
+def _logo(w=175):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Logo.png")
+    if not os.path.exists(path):
+        return '<div style="font-size:1.55rem;font-weight:800;color:#F1E9CB;">PRO_LAW</div>'
     import base64
-    with open(logo_path, "rb") as f:
+    with open(path,"rb") as f:
         b64 = base64.b64encode(f.read()).decode()
-    return (
-        f'<img src="data:image/png;base64,{b64}" '
-        f'style="max-width:{max_width}px;max-height:55px;object-fit:contain;'
-        f'filter:brightness(1.8) contrast(1.1);" />'
-    )
+    return (f'<img src="data:image/png;base64,{b64}" '
+            f'style="max-width:{w}px;max-height:52px;object-fit:contain;'
+            f'filter:brightness(1.8) contrast(1.05);" />')
 
 
-def _strength_bar(score: int) -> str:
-    colours = ["#ef4444","#ef4444","#f59e0b","#22c55e","#22c55e"]
-    labels  = ["Very weak","Weak","Fair","Strong","Very strong"]
-    widths  = [15, 35, 55, 80, 100]
-    c, w, l = colours[score], widths[score], labels[score]
-    return (
-        f'<div class="strength-bar-bg">'
-        f'<div style="height:4px;border-radius:2px;background:{c};width:{w}%;transition:width 0.3s;"></div></div>'
-        f'<div style="font-size:0.70rem;color:{c};margin-bottom:6px;">{l}</div>'
-    )
+def _footer():
+    return ('<div class="auth-footer">PRO_LAW Portfolio Tracking System'
+            ' &nbsp;·&nbsp; © 2026 PRO_LAW<br>'
+            '<a href="mailto:lawrenceowini17@gmail.com" '
+            'style="color:rgba(241,233,203,0.40);text-decoration:none;">'
+            'lawrenceowini17@gmail.com</a></div>')
 
 
-def _card_open() -> str:
-    return '<div class="auth-card">'
-
-
-def _card_close() -> str:
-    return '</div>'
-
-
-def _footer() -> str:
-    return (
-        '<div class="auth-footer">'
-        'PRO_LAW Portfolio Tracking System &nbsp;·&nbsp; © 2026 PRO_LAW<br>'
-        '<a href="mailto:lawrenceowini17@gmail.com" '
-        'style="color:rgba(241,233,203,0.50);text-decoration:none;">'
-        'lawrenceowini17@gmail.com</a>'
-        '</div>'
-    )
-
-
-# ── Query param helpers ────────────────────────────────────────────────────────
-
-def _qp(name: str):
+def _qp(k):
     try:
-        v = st.query_params.get(name)
+        v = st.query_params.get(k)
     except Exception:
-        v = (st.experimental_get_query_params() or {}).get(name)
-    return (v[0] if isinstance(v, list) else v) or ""
+        v = (st.experimental_get_query_params() or {}).get(k)
+    return (v[0] if isinstance(v,list) else v) or ""
 
 
 def _clear_qp():
@@ -194,39 +142,68 @@ def _clear_qp():
         except Exception: pass
 
 
-# ── Audit helper ───────────────────────────────────────────────────────────────
-
-def _log(event: str, details: dict):
+def _log(event, details):
     try:
-        import audit_trail as _audit
-        _audit.append_entry(event, details)
+        import audit_trail as _a
+        _a.append_entry(event, details)
     except Exception:
         pass
 
 
-# ── Bootstrap screen ───────────────────────────────────────────────────────────
+def _inject_ac(fields: dict):
+    """Inject autocomplete attributes via JS."""
+    parts = []
+    for label, ac in fields.items():
+        parts.append(f"""
+        (function(){{
+            var ls=document.querySelectorAll('label');
+            for(var i=0;i<ls.length;i++){{
+                if(ls[i].innerText.trim()==='{label}'){{
+                    var box=ls[i].closest('[data-testid="stTextInput"]');
+                    if(box){{var inp=box.querySelector('input');
+                        if(inp){{inp.setAttribute('autocomplete','{ac}');
+                                 inp.setAttribute('name','{ac}');}}}}
+                }}
+            }}
+        }})();""")
+    st.markdown(f"<script>{''.join(parts)}</script>", unsafe_allow_html=True)
+
+
+def _col():
+    _, c, _ = st.columns([1,2,1])
+    return c
+
+
+# ── Bootstrap ──────────────────────────────────────────────────────────────────
 
 def _render_bootstrap():
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
+    with _col():
         st.markdown(
-            f'{_card_open()}'
-            f'<div class="auth-logo">{_logo_html()}</div>'
+            f'<div class="auth-card">'
+            f'<div class="auth-logo">{_logo()}</div>'
             f'<div class="auth-title">Welcome to PRO_LAW</div>'
             f'<div class="auth-subtitle">Create your administrator account to get started.</div>',
             unsafe_allow_html=True,
         )
         with st.form("bootstrap_form"):
-            name  = st.text_input("Full Name", placeholder="Lawrence Owini")
-            email = st.text_input("Email", placeholder="admin@example.com")
-            pwd   = st.text_input("Password", type="password")
+            name  = st.text_input("Full Name",        placeholder="Lawrence Owini")
+            email = st.text_input("Email",            placeholder="admin@example.com")
+            pwd   = st.text_input("Password",         type="password")
             pwd2  = st.text_input("Confirm Password", type="password")
             if pwd:
                 score, issues = _auth.check_password_strength(pwd)
-                st.markdown(_strength_bar(score), unsafe_allow_html=True)
-                for issue in issues:
-                    st.caption(f"• {issue}")
+                colours = ["#ef4444","#ef4444","#f59e0b","#22c55e","#22c55e"]
+                labels  = ["Very weak","Weak","Fair","Strong","Very strong"]
+                widths  = [15,35,55,80,100]
+                c,w,l   = colours[score],widths[score],labels[score]
+                st.markdown(
+                    f'<div style="height:4px;border-radius:2px;background:rgba(241,233,203,0.12);margin:4px 0 2px;">'
+                    f'<div style="height:4px;border-radius:2px;background:{c};width:{w}%;"></div></div>'
+                    f'<div style="font-size:0.69rem;color:{c};margin-bottom:5px;">{l}</div>',
+                    unsafe_allow_html=True,
+                )
+                for i in issues: st.caption(f"• {i}")
             ok = st.form_submit_button("Create Administrator Account")
         if ok:
             if not email or not pwd:
@@ -234,25 +211,25 @@ def _render_bootstrap():
             elif pwd != pwd2:
                 st.error("Passwords do not match.")
             else:
-                success, msg = _auth.bootstrap_admin(email, pwd, name or "Administrator")
-                if success:
+                s, msg = _auth.bootstrap_admin(email, pwd, name or "Administrator")
+                if s:
                     st.success(f"✓ {msg} You can now sign in.")
                     st.rerun()
                 else:
                     st.error(msg)
-        st.markdown(f'{_footer()}{_card_close()}', unsafe_allow_html=True)
+        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+        _inject_ac({"Email":"email","Password":"new-password","Confirm Password":"new-password"})
 
 
-# ── MFA screen ────────────────────────────────────────────────────────────────
+# ── MFA ───────────────────────────────────────────────────────────────────────
 
 def _render_mfa():
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
+    with _col():
         st.markdown(
-            f'{_card_open()}'
-            f'<div class="auth-logo">{_logo_html()}</div>'
-            f'<div class="auth-title">Two-Factor Authentication</div>'
+            f'<div class="auth-card">'
+            f'<div class="auth-logo">{_logo()}</div>'
+            f'<div class="auth-title">Two-Factor Auth</div>'
             f'<div class="auth-subtitle">Enter the 6-digit code from your authenticator app.</div>',
             unsafe_allow_html=True,
         )
@@ -267,218 +244,198 @@ def _render_mfa():
             else:
                 st.error("Invalid code. Please try again.")
         if st.button("Cancel", key="mfa_cancel"):
-            _auth.logout_user()
+            _auth.logout_user(); st.rerun()
+        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+
+
+# ── Forgot password (notify admin) ────────────────────────────────────────────
+
+def _render_forgot():
+    st.markdown(LOGIN_CSS, unsafe_allow_html=True)
+    with _col():
+        st.markdown(
+            f'<div class="auth-card">'
+            f'<div class="auth-logo">{_logo()}</div>'
+            f'<div class="auth-title">Forgot Password</div>'
+            f'<div class="auth-subtitle">Enter your email and the administrator will be notified to verify your identity and reset your access.</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="info-notice">'
+            '🔐 For security, password resets are handled by the administrator. '
+            'They will verify your identity before resetting your password.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("forgot_form"):
+            email = st.text_input("Your Email Address", placeholder="you@example.com")
+            ok    = st.form_submit_button("Notify Administrator")
+        if ok:
+            if not email:
+                st.error("Please enter your email address.")
+            else:
+                with st.spinner("Sending notification…"):
+                    s, msg = _auth.forgot_password_notify_admin(email.strip().lower())
+                if s:
+                    st.markdown(
+                        f'<div class="success-notice">✓ {msg}</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.error(msg)
+                    st.info(
+                        "If email isn't configured, contact your administrator directly at "
+                        "lawrenceowini17@gmail.com and request a password reset."
+                    )
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("← Back to Sign In", key="forgot_back"):
+            st.session_state._auth_screen = "login"
             st.rerun()
-        st.markdown(f'{_footer()}{_card_close()}', unsafe_allow_html=True)
+        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+        _inject_ac({"Your Email Address":"email"})
 
 
 # ── Invite password setup ──────────────────────────────────────────────────────
 
 def _render_invite():
-    token_hash  = _qp("token_hash") or _qp("token")
+    token_hash   = _qp("token_hash") or _qp("token")
     invite_email = _qp("email")
 
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
+    with _col():
         st.markdown(
-            f'{_card_open()}'
-            f'<div class="auth-logo">{_logo_html()}</div>'
+            f'<div class="auth-card">'
+            f'<div class="auth-logo">{_logo()}</div>'
             f'<div class="auth-title">Complete Your Invite</div>'
             f'<div class="auth-subtitle">Set a password to activate your PRO_LAW account.</div>',
             unsafe_allow_html=True,
         )
         if not token_hash:
-            st.error("Invite link is missing its token. Ask an admin to resend it.")
+            st.error("Invite link is missing its token. Ask your administrator to resend.")
             if st.button("Back to Sign In"):
-                _clear_qp()
-                st.rerun()
-            st.markdown(f'{_footer()}{_card_close()}', unsafe_allow_html=True)
+                _clear_qp(); st.rerun()
+            st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
             return
-
         with st.form("invite_form"):
-            # Auto-fill email from query params but make it read-only visually
             st.text_input("Email", value=invite_email, disabled=True)
-            pwd  = st.text_input("New Password", type="password")
-            pwd2 = st.text_input("Confirm Password", type="password")
+            pwd  = st.text_input("New Password",      type="password")
+            pwd2 = st.text_input("Confirm Password",  type="password")
             if pwd:
-                score, issues = _auth.check_password_strength(pwd)
-                st.markdown(_strength_bar(score), unsafe_allow_html=True)
-                for issue in issues:
-                    st.caption(f"• {issue}")
+                score, _ = _auth.check_password_strength(pwd)
+                colours  = ["#ef4444","#ef4444","#f59e0b","#22c55e","#22c55e"]
+                widths   = [15,35,55,80,100]
+                labels   = ["Very weak","Weak","Fair","Strong","Very strong"]
+                c,w,l    = colours[score],widths[score],labels[score]
+                st.markdown(
+                    f'<div style="height:4px;border-radius:2px;background:rgba(241,233,203,0.12);margin:4px 0 2px;">'
+                    f'<div style="height:4px;border-radius:2px;background:{c};width:{w}%;"></div></div>'
+                    f'<div style="font-size:0.69rem;color:{c};margin-bottom:5px;">{l}</div>',
+                    unsafe_allow_html=True,
+                )
             ok = st.form_submit_button("Set Password and Sign In")
-
         if ok:
             if not pwd or not pwd2:
-                st.error("Please enter and confirm your password.")
+                st.error("Enter and confirm your password.")
             elif pwd != pwd2:
                 st.error("Passwords do not match.")
             else:
                 with st.spinner("Completing invite…"):
-                    success, result = _auth.complete_supabase_invite(token_hash, pwd)
-                if success:
+                    s, result = _auth.complete_supabase_invite(token_hash, pwd)
+                if s:
                     _auth.login_user(result, "supabase")
-                    _log("SESSION_START", {"email": result.get("email",""), "provider":"supabase_invite"})
+                    _log("SESSION_START", {"email":result.get("email",""),"provider":"invite"})
                     _clear_qp()
                     st.success("Account activated. Signing you in…")
                     st.rerun()
                 else:
                     st.error(str(result))
-        st.markdown(f'{_footer()}{_card_close()}', unsafe_allow_html=True)
+        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+        _inject_ac({"New Password":"new-password","Confirm Password":"new-password"})
 
 
-# ── Main login + signup form ───────────────────────────────────────────────────
+# ── Main sign-in form ──────────────────────────────────────────────────────────
 
-def _render_login_signup(session_expired: bool = False):
+def _render_signin(session_expired=False):
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
+    with _col():
         st.markdown(
-            f'{_card_open()}'
-            f'<div class="auth-logo">{_logo_html()}</div>'
-            f'<div class="auth-title">PRO_LAW</div>'
-            f'<div class="auth-subtitle">Portfolio Tracking System</div>',
+            f'<div class="auth-card">'
+            f'<div class="auth-logo">{_logo()}</div>'
+            f'<div class="auth-title">Sign In</div>'
+            f'<div class="auth-subtitle">PRO_LAW Portfolio Tracking System</div>',
             unsafe_allow_html=True,
         )
 
         if session_expired:
             st.markdown(
-                f'<div class="session-notice">⏱ Session expired after '
-                f'{_auth.SESSION_TIMEOUT_M} minutes. Please sign in again.</div>',
+                f'<div class="session-notice">⏱ Your session expired after '
+                f'{SESSION_TIMEOUT_M} minutes of inactivity. Please sign in again.</div>',
                 unsafe_allow_html=True,
             )
 
-        # Rate limit guard
-        if st.session_state.get("login_attempts", 0) >= _auth.MAX_LOGIN_ATTEMPTS:
+        if st.session_state.get("login_attempts",0) >= _auth.MAX_LOGIN_ATTEMPTS:
             st.error(f"Too many failed attempts. Please wait {_auth.LOCKOUT_MINUTES} minutes.")
-            st.markdown(f'{_footer()}{_card_close()}', unsafe_allow_html=True)
+            st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
             return
 
-        tab_in, tab_up = st.tabs(["Sign In", "Create Account"])
+        with st.form("login_form"):
+            email    = st.text_input("Email",    placeholder="you@example.com", key="li_email")
+            password = st.text_input("Password", type="password",               key="li_pwd")
+            submitted = st.form_submit_button("Sign In")
 
-        # ── Sign In tab ────────────────────────────────────────────────────────
-        with tab_in:
-            with st.form("login_form"):
-                email    = st.text_input("Email", placeholder="you@example.com", key="li_email")
-                password = st.text_input("Password", type="password", key="li_pwd")
-                submitted = st.form_submit_button("Sign In")
+        # Autocomplete for browser password manager
+        _inject_ac({"Email":"email","Password":"current-password"})
 
-            if submitted:
-                if not email or not password:
-                    st.error("Enter your email and password.")
+        # Forgot password link (subtle, below form)
+        if st.button("Forgot your password?", key="go_forgot"):
+            st.session_state._auth_screen = "forgot"
+            st.rerun()
+
+        if submitted:
+            if not email or not password:
+                st.error("Enter your email and password.")
+            else:
+                with st.spinner("Verifying…"):
+                    try:
+                        ok, result, provider = _auth.authenticate(
+                            email.strip().lower(), password
+                        )
+                    except Exception as ex:
+                        ok, result, provider = False, f"Unexpected error: {ex}", "error"
+
+                if ok:
+                    st.session_state.login_attempts = 0
+                    _auth.login_user(result, provider)
+                    _log("SESSION_START", {
+                        "email"   : email.strip().lower(),
+                        "provider": provider,
+                        "role"    : result.get("role","viewer"),
+                    })
+                    st.rerun()
                 else:
-                    with st.spinner("Verifying…"):
-                        try:
-                            ok, result, provider = _auth.authenticate(
-                                email.strip().lower(), password
-                            )
-                        except Exception as ex:
-                            ok, result, provider = False, f"Unexpected error: {ex}", "error"
-
-                    if ok:
-                        st.session_state.login_attempts = 0
-                        _auth.login_user(result, provider)
-                        _log("SESSION_START", {
-                            "email"   : email.strip().lower(),
-                            "provider": provider,
-                            "role"    : result.get("role","viewer"),
-                        })
-                        st.rerun()
+                    st.session_state.login_attempts = (
+                        st.session_state.get("login_attempts",0) + 1
+                    )
+                    if result == "EMAIL_NOT_CONFIRMED":
+                        st.warning(
+                            "Your email is not confirmed. "
+                            "Check your inbox or contact your administrator."
+                        )
                     else:
-                        attempts = st.session_state.get("login_attempts", 0) + 1
-                        st.session_state.login_attempts = attempts
+                        st.error(str(result))
 
-                        if result == "EMAIL_NOT_CONFIRMED":
-                            st.warning(
-                                "Your email address has not been confirmed yet. "
-                                "Check your inbox for a confirmation email from Supabase, "
-                                "or ask your admin to disable email confirmation in "
-                                "Supabase → Authentication → Settings."
-                            )
-                        else:
-                            st.error(str(result))
-                            with st.expander("Troubleshooting"):
-                                st.markdown("""
-- Make sure you are using the **exact email and password** you registered with
-- If you signed up via invite, use the password you set on the invite page
-- To skip email confirmation: Supabase → **Authentication → Settings** → disable **Enable email confirmations**
-- Check your `.env` has the correct `SUPABASE_URL` and `SUPABASE_ANON_KEY`
-                                """)
-
-        # ── Sign Up tab ────────────────────────────────────────────────────────
-        with tab_up:
-            st.markdown(
-                '<div style="font-size:0.78rem;color:rgba(241,233,203,0.55);'
-                'margin-bottom:0.8rem;text-align:center;">'
-                'New accounts have <strong style="color:rgba(241,233,203,0.75);">Viewer</strong> '
-                'access by default. An admin can change your role after sign-up.</div>',
-                unsafe_allow_html=True,
-            )
-            with st.form("signup_form"):
-                su_name  = st.text_input("Full Name", placeholder="Your Name", key="su_name")
-                su_email = st.text_input("Email", placeholder="you@example.com", key="su_email")
-                su_pwd   = st.text_input("Password", type="password", key="su_pwd")
-                su_pwd2  = st.text_input("Confirm Password", type="password", key="su_pwd2")
-                if su_pwd:
-                    score, issues = _auth.check_password_strength(su_pwd)
-                    st.markdown(_strength_bar(score), unsafe_allow_html=True)
-                    for issue in issues:
-                        st.caption(f"• {issue}")
-                su_ok = st.form_submit_button("Create Account")
-
-            if su_ok:
-                if not su_email or not su_pwd:
-                    st.error("Email and password are required.")
-                elif su_pwd != su_pwd2:
-                    st.error("Passwords do not match.")
-                else:
-                    score, issues = _auth.check_password_strength(su_pwd)
-                    if score < 2:
-                        st.error("Password too weak: " + "; ".join(issues))
-                    else:
-                        sb = _auth._get_supabase()
-                        if sb:
-                            with st.spinner("Creating account…"):
-                                ok, result = _auth.signup_supabase(
-                                    su_email.strip().lower(), su_pwd,
-                                    su_name.strip()
-                                )
-                            if ok:
-                                st.success(
-                                    "Account created! "
-                                    + ("Check your email to confirm your account, then sign in."
-                                       if _email_confirmation_likely_on()
-                                       else "You can now sign in.")
-                                )
-                                _log("CONFIG_CHANGE", {
-                                    "action": "user_signup",
-                                    "email" : su_email.strip().lower(),
-                                })
-                            else:
-                                st.error(str(result))
-                        else:
-                            # Local fallback signup (viewer only)
-                            try:
-                                _auth.create_local_user(
-                                    su_email.strip().lower(), su_pwd,
-                                    role="viewer",
-                                    full_name=su_name.strip(),
-                                )
-                                st.success("Account created. You can now sign in.")
-                            except ValueError as ve:
-                                st.error(str(ve))
-
-        st.markdown(f'{_footer()}{_card_close()}', unsafe_allow_html=True)
-
-
-def _email_confirmation_likely_on() -> bool:
-    """Heuristic — we can't query Supabase settings, so assume on unless .env says otherwise."""
-    return os.environ.get("SUPABASE_EMAIL_CONFIRM", "true").lower() not in ("false","0","no")
+        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
 
 
 # ── Public entry point ─────────────────────────────────────────────────────────
 
 def render_login_gate(session_expired: bool = False) -> bool:
+    """
+    Called at the top of streamlit_dashboard.py before any content.
+    Handles persistent sessions — if authenticated state is in session_state,
+    the user stays logged in across refreshes without re-entering credentials.
+    Returns True only when fully authenticated (and MFA verified if enabled).
+    """
     _auth.init_session()
 
     supabase_ok  = bool(
@@ -487,31 +444,49 @@ def render_login_gate(session_expired: bool = False) -> bool:
     )
     admin_exists = _auth.ensure_admin_exists()
 
-    # Invite link from Supabase email
-    invite_type = _qp("type").lower()
-    token_hash  = _qp("token_hash") or _qp("token")
-    if invite_type == "invite" or (token_hash and not st.session_state.get("authenticated")):
-        _render_invite()
-        st.stop()
-        return False
+    # ── Detect special URL flows ───────────────────────────────────────────────
+    qp_type    = _qp("type").lower()
+    token      = _qp("token_hash") or _qp("token")
+    have_token = bool(token) and not st.session_state.get("authenticated")
 
-    # First run — no admin and no Supabase
+    if qp_type == "recovery" or (have_token and qp_type == "recovery"):
+        _render_invite()   # reuse invite UI for recovery (same UX)
+        st.stop(); return False
+
+    if qp_type == "invite" or (have_token and not qp_type):
+        _render_invite()
+        st.stop(); return False
+
+    # ── Already authenticated — persistent session ─────────────────────────────
+    # st.session_state persists across page refreshes within the same browser tab.
+    # If the user is marked authenticated and session hasn't timed out, skip login.
+    if st.session_state.get("authenticated"):
+        if _auth.check_session_timeout():
+            # Session is valid — check MFA
+            user = st.session_state.get("user", {})
+            if user.get("mfa_enabled") and not st.session_state.get("mfa_verified"):
+                _render_mfa()
+                st.stop(); return False
+            # Clear any stale screen state
+            st.session_state.pop("_auth_screen", None)
+            return True
+        else:
+            # Timed out — show login with expired notice
+            session_expired = True
+
+    # ── Routing for unauthenticated users ──────────────────────────────────────
+    screen = st.session_state.get("_auth_screen", "login")
+
+    if screen == "forgot":
+        _render_forgot()
+        st.stop(); return False
+
+    # First run — no admin anywhere
     if not admin_exists and not supabase_ok:
         _render_bootstrap()
-        st.stop()
-        return False
+        st.stop(); return False
 
-    # Not authenticated
-    if not st.session_state.get("authenticated"):
-        _render_login_signup(session_expired=session_expired)
-        st.stop()
-        return False
-
-    # MFA pending
-    user = st.session_state.get("user", {})
-    if user.get("mfa_enabled") and not st.session_state.get("mfa_verified"):
-        _render_mfa()
-        st.stop()
-        return False
-
-    return True
+    # Show sign-in
+    _render_signin(session_expired=session_expired)
+    st.stop()
+    return False
