@@ -217,12 +217,20 @@ def _render_bootstrap():
                 <div class="auth-title">Sign In</div>
                 <div class="auth-subtitle">
                     PRO_LAW Portfolio Tracking System
-                    <br>For Testing Use: Email: examplemail@gmail.com Password: Examplemail1234!
                 </div>
                 <div class="info-notice">
                 </div>
             ''',
             unsafe_allow_html=True
+        )
+        st.info(
+            """
+             **Testing Account**
+
+            Email: examplemail@gmail.com
+
+            Password: Examplemail1234!
+            """
         )
         with st.form("bootstrap_form"):
             name  = st.text_input("Full Name",        placeholder="Lawrence Owini")
