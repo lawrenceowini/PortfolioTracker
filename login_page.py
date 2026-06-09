@@ -8,9 +8,6 @@ import os
 import streamlit as st
 import auth as _auth
 
-SUPABASE_URL=st.secrets["SUPABASE_URL"]
-SUPABASE_ANON_KEY=st.secrets["SUPABASE_ANON_KEY"]
-
 SESSION_TIMEOUT_M = _auth.SESSION_TIMEOUT_M
 
 LOGIN_CSS = """
