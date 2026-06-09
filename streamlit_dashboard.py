@@ -4813,16 +4813,92 @@ elif page == "👤 User Management":
         st.error("Auth modules not installed.")
         st.stop()
 
+    # ── Fetch all users from Supabase or local ─────────────────────────────────
+    def _fetch_all_users() -> list:
+        """Fetch users from Supabase pro_law_users if configured, else local."""
+        sb = _auth_mod._get_supabase()
+        if sb:
+            try:
+                resp = sb.table("pro_law_users").select("*").order("created_at").execute()
+                return resp.data or []
+            except Exception as e:
+                st.warning(f"Could not fetch from Supabase: {e}. Showing local users only.")
+        return _auth_mod.list_local_users()
+
+    def _update_user_supabase(user_id: str, email: str, updates: dict) -> bool:
+        """Update a user in Supabase pro_law_users table."""
+        sb = _auth_mod._get_supabase()
+        if sb and user_id:
+            try:
+                sb.table("pro_law_users").update(updates).eq("user_id", user_id).execute()
+                return True
+            except Exception as e:
+                st.error(f"Supabase update error: {e}")
+                return False
+        # Fallback to local
+        return _auth_mod.update_local_user(email, **updates)
+
+    def _delete_user_supabase(user_id: str, email: str) -> bool:
+        """Delete a user from Supabase auth + pro_law_users."""
+        sb = _auth_mod._get_supabase()
+        if sb and user_id:
+            try:
+                # Delete from pro_law_users (auth.users cascade will handle the rest
+                # if RLS allows, otherwise admin needs service_role key)
+                sb.table("pro_law_users").delete().eq("user_id", user_id).execute()
+                return True
+            except Exception as e:
+                st.error(f"Supabase delete error: {e}")
+                return False
+        return _auth_mod.delete_local_user(email)
+
+    def _create_user_supabase(email: str, password: str, role: str, full_name: str) -> tuple:
+        """Create user in Supabase auth + pro_law_users."""
+        sb = _auth_mod._get_supabase()
+        if sb:
+            try:
+                # Sign up via Supabase Auth
+                ok, result = _auth_mod.signup_supabase(email, password, full_name)
+                if not ok:
+                    return False, str(result)
+                user_id = result.get("user_id","")
+                # Update role in pro_law_users (signup creates viewer by default)
+                if user_id and role != "viewer":
+                    try:
+                        sb.table("pro_law_users").update({"role": role, "full_name": full_name}).eq("user_id", user_id).execute()
+                    except Exception:
+                        pass
+                return True, f"User {email} created in Supabase with role {role.upper()}."
+            except Exception as e:
+                return False, str(e)
+        # Local fallback
+        try:
+            _auth_mod.create_local_user(email, password, role, full_name)
+            return True, f"User {email} created locally with role {role.upper()}."
+        except ValueError as e:
+            return False, str(e)
+
     tab_users, tab_create, tab_portfolios = st.tabs([
         "All Users", "Create User", "Portfolio Access"
     ])
 
     with tab_users:
         st.markdown('<div class="section-title">Registered Users</div>', unsafe_allow_html=True)
-        users_list = _auth_mod.list_local_users()
+
+        if st.button("Refresh User List", key="um_refresh"):
+            if "um_users_cache" in st.session_state:
+                del st.session_state["um_users_cache"]
+            st.rerun()
+
+        # Cache the user list in session state to avoid refetching on every widget interaction
+        if "um_users_cache" not in st.session_state:
+            with st.spinner("Loading users…"):
+                st.session_state.um_users_cache = _fetch_all_users()
+
+        users_list = st.session_state.um_users_cache
 
         if not users_list:
-            st.info("No users found.")
+            st.info("No users found. Create the first user in the Create User tab.")
         else:
             import pandas as _upd
             users_df = _upd.DataFrame([{
@@ -4831,20 +4907,22 @@ elif page == "👤 User Management":
                 "Role"       : u.get("role","viewer").upper(),
                 "MFA"        : "Enabled" if u.get("mfa_enabled") else "Disabled",
                 "Active"     : "Yes" if u.get("active", True) else "No",
-                "Last Login" : u.get("last_login","Never") or "Never",
+                "Last Login" : str(u.get("last_login","Never") or "Never")[:19],
                 "Portfolios" : ", ".join(u.get("assigned_portfolios",[]) or []) or "All",
             } for u in users_list])
             st.dataframe(users_df, use_container_width=True, hide_index=True)
+            st.caption(f"{len(users_list)} user(s) registered")
 
             st.markdown('<div class="section-title">Edit User</div>', unsafe_allow_html=True)
-            edit_email = st.selectbox("Select user to edit:", [u["email"] for u in users_list], key="um_edit_sel")
-            edit_user  = next((u for u in users_list if u["email"] == edit_email), {})
+            edit_email  = st.selectbox("Select user to edit:", [u["email"] for u in users_list], key="um_edit_sel")
+            edit_user   = next((u for u in users_list if u["email"] == edit_email), {})
+            edit_uid    = edit_user.get("user_id", "")
+            current_role = edit_user.get("role","viewer")
+            role_idx = _auth_mod.ROLES.index(current_role) if current_role in _auth_mod.ROLES else 0
 
             e1, e2 = st.columns(2)
             with e1:
-                new_role   = st.selectbox("Role", _auth_mod.ROLES,
-                                          index=_auth_mod.ROLES.index(edit_user.get("role","viewer")),
-                                          key="um_role")
+                new_role   = st.selectbox("Role", _auth_mod.ROLES, index=role_idx, key="um_role")
                 new_active = st.checkbox("Account Active", value=edit_user.get("active", True), key="um_active")
             with e2:
                 new_name = st.text_input("Full Name", value=edit_user.get("full_name",""), key="um_name")
@@ -4853,50 +4931,73 @@ elif page == "👤 User Management":
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("Save Changes", type="primary", key="um_save"):
-                    _auth_mod.update_local_user(edit_email, role=new_role, active=new_active, full_name=new_name)
-                    if new_pwd.strip():
-                        score, issues = _auth_mod.check_password_strength(new_pwd)
-                        if score < 2:
-                            st.error("Password too weak: " + "; ".join(issues))
-                        else:
-                            _auth_mod.change_password(edit_email, new_pwd)
-                    if HAS_AUDIT:
-                        _audit.append_entry("CONFIG_CHANGE", {
-                            "action": "user_updated",
-                            "target": edit_email,
-                            "by"    : st.session_state.get("user_email",""),
-                        })
-                    st.success(f"User {edit_email} updated.")
-                    st.rerun()
+                    updates = {"role": new_role, "active": new_active, "full_name": new_name}
+                    ok = _update_user_supabase(edit_uid, edit_email, updates)
+                    if ok:
+                        if new_pwd.strip():
+                            score, issues = _auth_mod.check_password_strength(new_pwd)
+                            if score < 2:
+                                st.error("Password too weak: " + "; ".join(issues))
+                            else:
+                                # For Supabase users, password change requires admin API
+                                # For local users, use local change_password
+                                _auth_mod.change_password(edit_email, new_pwd)
+                        if HAS_AUDIT:
+                            _audit.append_entry("CONFIG_CHANGE", {
+                                "action": "user_updated",
+                                "target": edit_email,
+                                "changes": updates,
+                                "by"    : st.session_state.get("user_email",""),
+                            })
+                        st.success(f"User {edit_email} updated.")
+                        del st.session_state["um_users_cache"]
+                        st.rerun()
             with c2:
                 _me = st.session_state.get("user_email","")
                 if edit_email != _me:
                     if st.button("Delete User", key="um_del"):
-                        _auth_mod.delete_local_user(edit_email)
-                        if HAS_AUDIT:
-                            _audit.append_entry("CONFIG_CHANGE", {
-                                "action": "user_deleted",
-                                "target": edit_email,
-                                "by"    : _me,
-                            })
-                        st.success(f"User {edit_email} deleted.")
-                        st.rerun()
+                        ok = _delete_user_supabase(edit_uid, edit_email)
+                        if ok:
+                            if HAS_AUDIT:
+                                _audit.append_entry("CONFIG_CHANGE", {
+                                    "action": "user_deleted",
+                                    "target": edit_email,
+                                    "by"    : _me,
+                                })
+                            st.success(f"User {edit_email} deleted.")
+                            del st.session_state["um_users_cache"]
+                            st.rerun()
                 else:
                     st.caption("Cannot delete your own account.")
 
     with tab_create:
         st.markdown('<div class="section-title">Create New User</div>', unsafe_allow_html=True)
+        _sb_configured = bool(_auth_mod._get_supabase())
+        if _sb_configured:
+            st.markdown(
+                '<div style="background:rgba(59,68,54,0.15);border:1px solid rgba(122,140,110,0.3);'
+                'border-radius:8px;padding:0.7rem 1rem;font-size:0.83rem;margin-bottom:1rem;"'
+                '>Users are created in Supabase Auth. They can log in immediately using the credentials you set.</div>',
+                unsafe_allow_html=True,
+            )
         with st.form("create_user_form"):
             c_name  = st.text_input("Full Name")
             c_email = st.text_input("Email Address")
-            c_role  = st.selectbox("Role", _auth_mod.ROLES, index=0)
+            c_role  = st.selectbox("Role", _auth_mod.ROLES, index=0,
+                                   format_func=lambda r: r.upper())
             c_pwd   = st.text_input("Password", type="password")
             c_pwd2  = st.text_input("Confirm Password", type="password")
-
             if c_pwd:
                 score, issues = _auth_mod.check_password_strength(c_pwd)
-                st.markdown(f"**Password strength:** {'Weak' if score < 2 else 'Fair' if score < 3 else 'Strong'}")
-
+                strength_label = "Weak" if score < 2 else "Fair" if score < 3 else "Strong"
+                strength_color = "#dc2626" if score < 2 else "#d97706" if score < 3 else "#16a34a"
+                st.markdown(
+                    f'<div style="font-size:0.8rem;color:{strength_color};margin-bottom:4px;">'
+                    f'Password strength: <strong>{strength_label}</strong></div>',
+                    unsafe_allow_html=True,
+                )
+                for issue in issues:
+                    st.caption(f"• {issue}")
             submitted = st.form_submit_button("Create User")
 
         if submitted:
@@ -4909,8 +5010,11 @@ elif page == "👤 User Management":
                 if score < 2:
                     st.error("Password too weak: " + "; ".join(issues))
                 else:
-                    try:
-                        _auth_mod.create_local_user(c_email.strip().lower(), c_pwd, c_role, c_name)
+                    with st.spinner("Creating user…"):
+                        ok, msg = _create_user_supabase(
+                            c_email.strip().lower(), c_pwd, c_role, c_name.strip()
+                        )
+                    if ok:
                         if HAS_AUDIT:
                             _audit.append_entry("CONFIG_CHANGE", {
                                 "action": "user_created",
@@ -4918,28 +5022,33 @@ elif page == "👤 User Management":
                                 "role"  : c_role,
                                 "by"    : st.session_state.get("user_email",""),
                             })
-                        st.success(f"User {c_email} created with role {c_role.upper()}.")
+                        st.success(msg)
+                        if "um_users_cache" in st.session_state:
+                            del st.session_state["um_users_cache"]
                         st.rerun()
-                    except ValueError as e:
-                        st.error(str(e))
+                    else:
+                        st.error(msg)
 
     with tab_portfolios:
         st.markdown('<div class="section-title">Assign Portfolio Access</div>', unsafe_allow_html=True)
-        st.caption("Viewers are restricted to their assigned portfolios. Managers and Admins have full access.")
+        st.caption("Viewers are restricted to their assigned portfolios. Managers and Admins have access to all.")
 
         import glob as _glob2
         _rdir    = "reports"
         _all_pfs = [os.path.basename(f).replace("_Dashboard_Output.xlsx","")
                     for f in _glob2.glob(os.path.join(_rdir, "*_Dashboard_Output.xlsx"))]
 
-        users_list2 = [u for u in _auth_mod.list_local_users() if u.get("role") == "viewer"]
+        _all_users = st.session_state.get("um_users_cache", _fetch_all_users())
+        users_list2 = [u for u in _all_users if u.get("role") == "viewer"]
+
         if not users_list2:
-            st.info("No viewer accounts to configure. Managers and Admins have access to all portfolios.")
+            st.info("No viewer accounts found. Managers and Admins have access to all portfolios.")
         elif not _all_pfs:
             st.info("No portfolio files found in reports/.")
         else:
             pf_email = st.selectbox("Select viewer:", [u["email"] for u in users_list2], key="pf_user")
             pf_user  = next((u for u in users_list2 if u["email"] == pf_email), {})
+            pf_uid   = pf_user.get("user_id","")
             assigned = pf_user.get("assigned_portfolios", []) or []
 
             selected_pfs = st.multiselect(
@@ -4949,15 +5058,19 @@ elif page == "👤 User Management":
                 key="pf_sel",
             )
             if st.button("Save Portfolio Access", type="primary", key="pf_save"):
-                _auth_mod.update_local_user(pf_email, assigned_portfolios=selected_pfs)
-                if HAS_AUDIT:
-                    _audit.append_entry("CONFIG_CHANGE", {
-                        "action"    : "portfolio_access_updated",
-                        "target"    : pf_email,
-                        "portfolios": selected_pfs,
-                        "by"        : st.session_state.get("user_email",""),
-                    })
-                st.success(f"Access updated for {pf_email}.")
+                ok = _update_user_supabase(pf_uid, pf_email, {"assigned_portfolios": selected_pfs})
+                if ok:
+                    if HAS_AUDIT:
+                        _audit.append_entry("CONFIG_CHANGE", {
+                            "action"    : "portfolio_access_updated",
+                            "target"    : pf_email,
+                            "portfolios": selected_pfs,
+                            "by"        : st.session_state.get("user_email",""),
+                        })
+                    st.success(f"Portfolio access updated for {pf_email}.")
+                    if "um_users_cache" in st.session_state:
+                        del st.session_state["um_users_cache"]
+                    st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
