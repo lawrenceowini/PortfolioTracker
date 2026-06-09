@@ -5,6 +5,10 @@ Usage: python supabase_test.py
 import os
 from dotenv import load_dotenv
 load_dotenv()
+import streamlit as st
+SUPABASE_URL=st.secrets["SUPABASE_URL"]
+SUPABASE_ANON_KEY=st.secrets["SUPABASE_ANON_KEY"]
+
 
 URL = os.environ.get("SUPABASE_URL","").strip()
 KEY = os.environ.get("SUPABASE_ANON_KEY","").strip()
