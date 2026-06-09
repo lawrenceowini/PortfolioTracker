@@ -15,9 +15,6 @@ import datetime
 from typing import Optional
 
 import streamlit as st
-SUPABASE_URL=st.secrets["SUPABASE_URL"]
-SUPABASE_ANON_KEY=st.secrets["SUPABASE_ANON_KEY"]
-
 
 # ── Optional dependencies ──────────────────────────────────────────────────────
 try:
