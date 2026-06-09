@@ -7,6 +7,7 @@ __pycache__/
 .env
 .env.*
 auth_users.json
+.streamlit/secrets.toml
 
 # Generated portfolio outputs and local state
 reports/
