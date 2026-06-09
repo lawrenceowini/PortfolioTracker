@@ -217,9 +217,9 @@ def _render_bootstrap():
                 <div class="auth-title">Sign In</div>
                 <div class="auth-subtitle">
                     PRO_LAW Portfolio Tracking System
+                    <br>For Testing Use: Email: examplemail@gmail.com Password: Examplemail1234!
                 </div>
                 <div class="info-notice">
-                    For Testing Use: Email: examplemail@gmail.com Password: Examplemail1234!
                 </div>
             ''',
             unsafe_allow_html=True
