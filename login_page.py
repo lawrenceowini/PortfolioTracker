@@ -22,16 +22,23 @@ html, body, .stApp,
     min-height: 100vh;
 }
 
-.auth-card {
-    background: rgba(59,68,54,0.22);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(241,233,203,0.16);
-    border-radius: 20px;
-    padding: 2.8rem 2.6rem 2.2rem 2.6rem;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.42),
-                0 1px 0 rgba(241,233,203,0.07) inset;
-    margin: 0 auto;
+.auth-card{
+    background:rgba(255,255,255,0.08);
+    backdrop-filter:blur(24px);
+    -webkit-backdrop-filter:blur(24px);
+
+    border:1px solid rgba(255,255,255,0.12);
+
+    border-radius:28px;
+
+    padding:3rem 2.8rem;
+
+    box-shadow:
+        0 15px 50px rgba(0,0,0,0.45),
+        0 25px 80px rgba(0,0,0,0.25),
+        0 0 40px rgba(255,255,255,0.03) inset;
+
+    margin:0 auto;
 }
 .auth-logo  { text-align:center; margin-bottom:1.3rem; }
 .auth-title {
@@ -63,11 +70,16 @@ html, body, .stApp,
 }
 
 /* Inputs */
-.stTextInput input {
-    background:rgba(255,255,255,0.08) !important;
-    border:1px solid rgba(241,233,203,0.20) !important;
-    border-radius:9px !important;
-    color:#F1E9CB !important; font-size:0.875rem !important;
+.stTextInput input{
+    background:rgba(255,255,255,0.07) !important;
+    border:1px solid rgba(255,255,255,0.15) !important;
+    border-radius:14px !important;
+
+    color:#F1E9CB !important;
+
+    height:52px !important;
+
+    backdrop-filter:blur(10px);
 }
 .stTextInput input::placeholder { color:rgba(241,233,203,0.28) !important; }
 .stTextInput label {
@@ -80,16 +92,30 @@ html, body, .stApp,
 }
 
 /* Buttons */
-.stButton > button {
-    background:#3B4436 !important; color:#F1E9CB !important;
-    border:1px solid rgba(241,233,203,0.20) !important;
-    border-radius:9px !important; font-weight:600 !important;
-    font-size:0.875rem !important; padding:0.55rem 1rem !important;
-    transition:all 0.18s !important; width:100%;
+.stButton > button{
+    width:100%;
+    height:52px;
+
+    background:rgba(59,68,54,0.85) !important;
+
+    border:1px solid rgba(255,255,255,0.15) !important;
+
+    border-radius:50% !important;
+
+    color:#F1E9CB !important;
+
+    font-weight:600;
+
+    transition:0.3s;
 }
-.stButton > button:hover {
+
+.stButton > button:hover{
     background:#4a5a44 !important;
-    border-color:rgba(241,233,203,0.36) !important;
+
+    transform:translateY(-2px);
+
+    box-shadow:
+        0 8px 25px rgba(0,0,0,0.35);
 }
 /* Ghost/link-style button */
 button[kind="secondary"] {
@@ -101,6 +127,10 @@ button[kind="secondary"] {
 }
 button[kind="secondary"]:hover {
     color:#F1E9CB !important; background:transparent !important;
+}
+.forgot-link{
+    text-align:center;
+    margin-top:12px;
 }
 </style>
 """
@@ -180,11 +210,15 @@ def _render_bootstrap():
     st.markdown(LOGIN_CSS, unsafe_allow_html=True)
     with _col():
         st.markdown(
-            f'<div class="auth-card">'
-            f'<div class="auth-logo">{_logo()}</div>'
-            f'<div class="auth-title">Welcome to PRO_LAW</div>'
-            f'<div class="auth-subtitle">Create your administrator account to get started.</div>',
-            unsafe_allow_html=True,
+            f'''
+                <div class="auth-card">
+                <div class="auth-logo">{_logo()}</div>
+                <div class="auth-title">Sign In</div>
+                <div class="auth-subtitle">
+                    PRO_LAW Portfolio Tracking System
+                </div>
+            ''',
+            unsafe_allow_html=True
         )
         with st.form("bootstrap_form"):
             name  = st.text_input("Full Name",        placeholder="Lawrence Owini")
@@ -217,7 +251,7 @@ def _render_bootstrap():
                     st.rerun()
                 else:
                     st.error(msg)
-        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         _inject_ac({"Email":"email","Password":"new-password","Confirm Password":"new-password"})
 
 
@@ -245,7 +279,7 @@ def _render_mfa():
                 st.error("Invalid code. Please try again.")
         if st.button("Cancel", key="mfa_cancel"):
             _auth.logout_user(); st.rerun()
-        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ── Forgot password (notify admin) ────────────────────────────────────────────
@@ -291,7 +325,7 @@ def _render_forgot():
         if st.button("← Back to Sign In", key="forgot_back"):
             st.session_state._auth_screen = "login"
             st.rerun()
-        st.markdown(f'{_footer()}</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         _inject_ac({"Your Email Address":"email"})
 
 
