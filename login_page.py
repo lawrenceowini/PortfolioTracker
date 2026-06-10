@@ -7,7 +7,7 @@ Persistent session via st.session_state (survives refresh).
 import os
 import auth as _auth
 import streamlit as st
-st.write(st.secrets)
+#st.write(st.secrets)
 
 SESSION_TIMEOUT_M = _auth.SESSION_TIMEOUT_M
 
